@@ -22,10 +22,8 @@ output_names = ['last_hidden_state']
  
 with torch.no_grad():
     torch.onnx.export(
-        model = model,
-        args = ({'input_ids': input_ids['input_ids'],
-                # 'attention_mask': decoder_input['attention_mask'],
-                }),
+        model=model,
+        args=(input_ids['input_ids'],),
         f=onnx_path,
         verbose=False,
         input_names=input_names,
