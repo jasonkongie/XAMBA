@@ -9,7 +9,15 @@ Fix: Replace the for-loop SSM scan with a fully vectorized implementation
 using CumSum + triangular factor matrix. This is mathematically exact
 (no approximation) and uses only NPU-supported ops.
 
+Key identity used to eliminate Log op:
+    log(discrete_A) = log(exp(A * delta)) = A * delta
+So cumlog_A = cumsum(A * delta, dim=seq) = A * cumsum(delta, dim=seq)
+This means we never need to compute discrete_A or call torch.log().
+
 Also inlines softplus -> relu (ActiBA) for NPU compatibility.
+
+Ops in final OV model: CumSum, Exp, Multiply, Subtract, ReduceSum, Unsqueeze
+All confirmed NPU-supported from Mamba-2 working model. No Log, no Gather.
 
 Usage in convert.py:
     from modeling_mamba_npu import patched_slow_forward
@@ -34,7 +42,7 @@ def patched_slow_forward(
     dtype = input_states.dtype
 
     # 1. Gated MLP's linear projection
-    projected_states = self.in_proj(input_states).transpose(1, 2)   # [batch, 2*d_in, seq_len]
+    projected_states = self.in_proj(input_states).transpose(1, 2)                   # [batch, 2*d_in, seq_len]
     hidden_states, gate = projected_states.chunk(2, dim=1)
 
     if attention_mask is not None:
@@ -78,43 +86,43 @@ def patched_slow_forward(
     # ActiBA: relu instead of softplus for NPU compatibility
     discrete_time_step = nn.functional.relu(discrete_time_step).transpose(1, 2)    # [batch, d_in, seq_len]
 
-    # 3.b. Discretization
-    A = -torch.exp(self.A_log.float())                                              # [d_in, d_state]
-    discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None])# [batch, d_in, seq_len, d_state]
+    # 3.b. Discretization (B only; A handled implicitly below via identity)
     discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()      # [batch, d_in, seq_len, d_state]
-    deltaB_u = discrete_B * hidden_states[:, :, :, None].float()                   # [batch, d_in, seq_len, d_state]
+    deltaB_u   = discrete_B * hidden_states[:, :, :, None].float()                 # [batch, d_in, seq_len, d_state]
 
-    # 3.c. Vectorized SSM scan — replaces the for-loop to eliminate Gather ops
+    # 3.c. Vectorized SSM scan — no loop, no Gather, no Log
     #
     # Recurrence: h[t] = A[t]*h[t-1] + Bu[t],  h[-1] = 0
-    # Closed form: h[t] = Σ_{s=0}^{t} (Π_{r=s+1}^{t} A[r]) * Bu[s]
+    # Closed form: h[t] = sum_{s=0}^{t} factor[t,s] * Bu[s]
+    #   where factor[t,s] = prod_{r=s+1}^{t} discrete_A[r]
+    #                      = exp( sum_{r=s+1}^{t} log(discrete_A[r]) )
+    #                      = exp( cumlog_A[t] - cumlog_A[s] )
     #
-    # factor[t,s] = Π_{r=s+1}^{t} A[r]
-    #             = exp( Σ_{r=s+1}^{t} log(A[r]) )
-    #             = exp( cumlog_A[t] - cumlog_A[s] )
+    # Key identity (eliminates Log op):
+    #   log(discrete_A[r]) = log(exp(A * delta[r])) = A * delta[r]
+    #   cumlog_A[t] = sum_{r=0}^{t} A * delta[r]
+    #               = A * cumsum(delta, dim=seq)[t]   ← A factors out of sum
     #
-    # where cumlog_A[t] = Σ_{r=0}^{t} log(A[r])   (CumSum — NPU supported)
-    #
-    # Ops: Log, CumSum, Unsqueeze, Subtract, Exp, Multiply, ReduceSum
-    # All confirmed NPU-supported from Mamba-2 working model.
+    # Ops: CumSum, Multiply, Subtract, Exp, ReduceSum — all NPU-confirmed.
 
-    log_A = torch.log(discrete_A.float().clamp(min=1e-8))                          # [batch, d_in, seq_len, d_state]
-    cumlog_A = torch.cumsum(log_A, dim=2)                                           # [batch, d_in, seq_len, d_state]
+    A_matrix  = -torch.exp(self.A_log.float())                                      # [d_in, d_state] — constant
+    cum_dt    = torch.cumsum(discrete_time_step, dim=2)                             # [batch, d_in, seq_len]
+    cumlog_A  = A_matrix[None, :, None, :] * cum_dt[:, :, :, None]                 # [batch, d_in, seq_len, d_state]
 
-    # factor[b, d, t, s, k] = exp(cumlog_A[b,d,t,k] - cumlog_A[b,d,s,k])
+    # factor[b, d_in, t, s, d_state] = exp(cumlog_A[t] - cumlog_A[s])
     factors = torch.exp(
         cumlog_A.unsqueeze(3) - cumlog_A.unsqueeze(2)                              # [batch, d_in, seq_len, seq_len, d_state]
     )
 
-    # Causal lower-triangular mask: zero out future positions (t < s)
-    # With static seq_len=4 this becomes a Const node in ONNX — no runtime cost
-    mask = torch.tril(torch.ones(seq_len, seq_len, dtype=factors.dtype, device=factors.device))
+    # Causal lower-triangular mask: zero future positions (t < s)
+    # seq_len is static (=tokens), so tril becomes a Const node in ONNX
+    mask    = torch.tril(torch.ones(seq_len, seq_len, dtype=factors.dtype, device=factors.device))
     factors = factors * mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1)               # [batch, d_in, seq_len, seq_len, d_state]
 
-    # h[t] = Σ_s factor[t,s] * Bu[s]
+    # h[t] = sum_s factor[t,s] * Bu[s]
     h = (factors * deltaB_u.float().unsqueeze(2)).sum(dim=3)                       # [batch, d_in, seq_len, d_state]
 
-    # y[t] = Σ_k h[t,:,k] * C[t,k]
+    # y[t] = sum_k h[t,:,k] * C[t,k]
     scan_output = (h * C.float().unsqueeze(1)).sum(dim=-1).to(dtype)               # [batch, d_in, seq_len]
 
     scan_output = scan_output + (hidden_states * self.D[None, :, None])
