@@ -11,7 +11,7 @@ import shutil
 # nireq = int(input("Enter nireq value (1 or more): ").strip())
 
 # Devices and hints
-devices = ["CPU", "NPU"] #["CPU", "GPU", "NPU"]
+devices = ["CPU", "NPU", "HETERO:NPU,CPU"] #["CPU", "GPU", "NPU"]
 hints = ["latency"] #, "tput"]
 performance_counters_list = ['OFF']#, 'ON']
 nireq = -1
@@ -131,7 +131,8 @@ for file_name in os.listdir(blob_folder):
                 if performance_counters == "ON":
                     cmd += "-pc -pcsort simple_sort -report_type detailed_counters "
 
-                cmd += f"-d {device} > {report_folder}/{blob_name}_{device}_hint_{hint}.txt"
+                device_safe = device.replace(":", "_").replace(",", "_")
+                cmd += f"-d {device} > {report_folder}/{blob_name}_{device_safe}_hint_{hint}.txt"
 
                 print(cmd)
                 subprocess.run(cmd, shell=True)
