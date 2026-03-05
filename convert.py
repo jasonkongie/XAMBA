@@ -36,8 +36,20 @@ with torch.no_grad():
         dynamic_axes=None,
     )
 
-### Convert ONNX → OpenVINO IR
-ov_model = ov.convert_model(input_model=onnx_path)
+### Simplify ONNX to remove Identity ops (NPU rejects Identity at opset16)
+import onnx
+from onnxsim import simplify
+
+print("Simplifying ONNX model (removing Identity ops)...")
+model_onnx = onnx.load(onnx_path)
+model_simplified, check = simplify(model_onnx)
+assert check, "ONNX simplification failed validation"
+simplified_path = onnx_path.replace(".onnx", "_simplified.onnx")
+onnx.save(model_simplified, simplified_path)
+print(f"Simplified ONNX saved to {simplified_path}")
+
+### Convert simplified ONNX → OpenVINO IR
+ov_model = ov.convert_model(input_model=simplified_path)
 
 # compress_to_fp16=False: keeps weights as FP32 so NNCF's compress_weights
 # can find all 48 MatMul nodes.  NNCF will apply INT4 compression in quantize_nncf.py.
