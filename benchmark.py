@@ -100,8 +100,10 @@ def extract_log_data(log_folder, output_csv):
                     print(f"Could not extract data from {file_name}")
 
 
-# Process each file in the blob folder
+# Process only quantized pareto models (mamba2_point*.xml), not the base FP32 model
 for file_name in os.listdir(blob_folder):
+    if not file_name.startswith("mamba2_point"):
+        continue
     for performance_counters in  performance_counters_list:
         if not file_name.endswith(".xml"):
             continue

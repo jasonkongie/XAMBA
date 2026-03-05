@@ -154,9 +154,11 @@ def quantize_pareto_point(core, input_model_path, point_name, kl_threshold,
 
     compressed_model = nncf.compress_weights(**compress_kwargs)
 
-    # Save
+    # Save — compress_to_fp16=True converts remaining FP32 activations to FP16
+    # so the NPU can load the model (NPU requires FP16 or lower precision).
+    # The INT4/INT8 compressed weights are unaffected by this flag.
     output_path = os.path.join(output_dir, f"mamba2_{point_name}.xml")
-    ov.save_model(compressed_model, output_path)
+    ov.save_model(compressed_model, output_path, compress_to_fp16=True)
     print(f"  Saved: {output_path}")
 
     # Report file size
