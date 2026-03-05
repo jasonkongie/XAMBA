@@ -2,6 +2,7 @@ import os
 import torch
 import openvino as ov
 
+os.makedirs("onnx_model", exist_ok=True)
 os.makedirs("ov_model", exist_ok=True)
 
 from transformers import Mamba2Config, Mamba2ForCausalLM
@@ -20,18 +21,38 @@ print(model)
 
 tokens = 4
 
-### Direct PyTorch → OpenVINO conversion (no ONNX intermediate)
-# The ONNX path inserts Identity ops (opset16) that the NPU compiler rejects.
-# Direct conversion avoids these ONNX artifacts entirely.
-example_input = torch.tensor([list(range(tokens))])
+### ONNX export
+input_ids = {'input_ids': torch.tensor([list(range(tokens))])}
+onnx_path = f"onnx_model/{model_name}.onnx"
+input_names = list(input_ids.keys())
+output_names = ['last_hidden_state']
 
 with torch.no_grad():
-    ov_model = ov.convert_model(
-        model,
-        example_input=example_input,
-        input=[("input_ids", ov.PartialShape([1, tokens]))]
-    )
+    torch.onnx.export(
+        model = model,
+        args = ({'input_ids': input_ids['input_ids'],
+                }),
+        f=onnx_path,
+        verbose=False,
+        input_names=input_names,
+        output_names=output_names,
+        dynamic_axes=None
+        )
 
+### Simplify ONNX to remove Identity ops (NPU rejects Identity at opset16)
+import onnx
+from onnxsim import simplify
+
+print("Simplifying ONNX model (removing Identity ops)...")
+model_onnx = onnx.load(onnx_path)
+model_simplified, check = simplify(model_onnx)
+assert check, "ONNX simplification failed validation"
+simplified_path = onnx_path.replace(".onnx", "_simplified.onnx")
+onnx.save(model_simplified, simplified_path)
+print(f"Simplified ONNX saved to {simplified_path}")
+
+### Convert simplified ONNX → OpenVINO IR
+ov_model = ov.convert_model(input_model=simplified_path)
 ov.save_model(ov_model, output_model=f"ov_model/{model_name}.xml",
                 compress_to_fp16=True)
 

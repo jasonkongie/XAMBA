@@ -15,6 +15,7 @@ Prerequisites:
 
 import json
 import os
+import re
 import openvino as ov
 import nncf
 
@@ -49,19 +50,37 @@ def get_layers_to_keep_fp16(sensitivity, kl_threshold):
     return [name for name, kl in sensitivity if kl >= kl_threshold]
 
 
+def pt_to_ir_path(pytorch_name):
+    """
+    Convert a PyTorch layer name to the path fragment used in OV IR friendly names.
+
+    PyTorch:  'backbone.layers.0.mixer.out_proj'
+    OV IR:    '/layers.0/mixer/out_proj/MatMul'
+
+    Transformation:
+      1. Strip leading 'backbone.' prefix (the top-level model wrapper is elided)
+      2. Replace '.<letter>' separators with '/<letter>' (dots before digits stay,
+         e.g. 'layers.0' remains 'layers.0' because OV keeps ModuleList indices)
+    """
+    name = pytorch_name.removeprefix("backbone.")
+    name = re.sub(r"\.([a-zA-Z_])", r"/\1", name)
+    return name
+
+
 def find_ir_node_names(ov_model, pytorch_layer_names):
     """
     Map PyTorch layer names to OpenVINO IR node names.
 
-    OV nodes typically contain the PyTorch module path in their friendly_name.
-    For example: 'backbone.layers.0.mixer.in_proj/aten::linear/MatMul'
-    We match if the PyTorch name appears as a substring of the OV node name.
+    OV IR friendly names use slash separators and omit the 'backbone.' prefix,
+    e.g. 'backbone.layers.0.mixer.out_proj' maps to '/layers.0/mixer/out_proj/MatMul'.
+    We convert each PyTorch name to its IR path fragment, then match as a substring.
     """
+    ir_paths = [pt_to_ir_path(n) for n in pytorch_layer_names]
     ir_names = []
     for op in ov_model.get_ops():
         friendly = op.get_friendly_name()
-        for pt_name in pytorch_layer_names:
-            if pt_name in friendly:
+        for ir_path in ir_paths:
+            if ir_path in friendly:
                 ir_names.append(friendly)
                 break
     return ir_names
