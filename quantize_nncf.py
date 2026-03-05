@@ -136,7 +136,10 @@ def quantize_pareto_point(core, input_model_path, point_name, kl_threshold,
     # NNCF IgnoredScope(patterns=...) uses re.fullmatch against NNCFGraph node names.
     ignore_patterns = build_ignore_patterns(fp16_layers_pt)
     print(f"  FP16 ignore patterns: {len(ignore_patterns)}")
-    ignored = nncf.IgnoredScope(patterns=ignore_patterns) if ignore_patterns else None
+    # validate=False: skip NNCF's check that every pattern matched a node.
+    # The sensitivity file includes 'lm_head' (from Mamba2ForCausalLM) but the
+    # OV model is Mamba2Model which has no lm_head — so some patterns won't match.
+    ignored = nncf.IgnoredScope(patterns=ignore_patterns, validate=False) if ignore_patterns else None
 
     # Compress weights — group_size=-1 → per-channel INT4 (no minimum-size constraint,
     # avoids fallback to INT8 that group_size=128 can trigger for smaller matrices)
