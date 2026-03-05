@@ -54,6 +54,6 @@ print(f"Simplified ONNX saved to {simplified_path}")
 ### Convert simplified ONNX → OpenVINO IR
 ov_model = ov.convert_model(input_model=simplified_path)
 ov.save_model(ov_model, output_model=f"ov_model/{model_name}.xml",
-                compress_to_fp16=True)
+                compress_to_fp16=False)  # Keep FP32 so NNCF can see all weight nodes
 
 print(f"Saved full Mamba-2 model (24 layers) to ov_model/{model_name}.xml")

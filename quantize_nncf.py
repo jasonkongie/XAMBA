@@ -67,13 +67,30 @@ def pt_to_ir_path(pytorch_name):
     return name
 
 
+def build_ignore_patterns(pytorch_layer_names):
+    """
+    Build NNCF IgnoredScope regex patterns from PyTorch layer names.
+
+    NNCF matches patterns against its internal NNCFGraph node names using
+    re.fullmatch(), so we wrap each IR path fragment with '.*' on both sides
+    for substring matching.  re.escape() protects literal dots in 'layers.N'.
+
+    Example: 'backbone.layers.0.mixer.out_proj'
+        → ir_path: 'layers.0/mixer/out_proj'
+        → pattern: '.*layers\\.0/mixer/out_proj.*'
+        matches:   '/layers.0/mixer/out_proj/MatMul'
+    """
+    patterns = []
+    for name in pytorch_layer_names:
+        ir_path = pt_to_ir_path(name)
+        patterns.append(f".*{re.escape(ir_path)}.*")
+    return patterns
+
+
 def find_ir_node_names(ov_model, pytorch_layer_names):
     """
-    Map PyTorch layer names to OpenVINO IR node names.
-
-    OV IR friendly names use slash separators and omit the 'backbone.' prefix,
-    e.g. 'backbone.layers.0.mixer.out_proj' maps to '/layers.0/mixer/out_proj/MatMul'.
-    We convert each PyTorch name to its IR path fragment, then match as a substring.
+    Map PyTorch layer names to OpenVINO IR node names (used for diagnostics only).
+    Returns OV op friendly names whose name contains the transformed IR path.
     """
     ir_paths = [pt_to_ir_path(n) for n in pytorch_layer_names]
     ir_names = []
@@ -84,6 +101,17 @@ def find_ir_node_names(ov_model, pytorch_layer_names):
                 ir_names.append(friendly)
                 break
     return ir_names
+
+
+def print_matmul_nodes(ov_model):
+    """Print all MatMul / Gather nodes visible in the OV IR (helps diagnose NNCF coverage)."""
+    matmuls = [op.get_friendly_name() for op in ov_model.get_ops()
+               if "MatMul" in op.get_type_name() or "Gather" in op.get_type_name()]
+    print(f"  OV IR MatMul/Gather nodes: {len(matmuls)}")
+    for name in matmuls[:10]:
+        print(f"    {name}")
+    if len(matmuls) > 10:
+        print(f"    ... and {len(matmuls) - 10} more")
 
 
 def quantize_pareto_point(core, input_model_path, point_name, kl_threshold,
@@ -102,26 +130,21 @@ def quantize_pareto_point(core, input_model_path, point_name, kl_threshold,
     # Load model fresh for each point
     ov_model = core.read_model(input_model_path)
 
-    # Map PyTorch names to IR node names
-    ir_names_to_ignore = find_ir_node_names(ov_model, fp16_layers_pt)
-    print(f"  Matched IR nodes to ignore: {len(ir_names_to_ignore)}")
+    # Build regex patterns for layers that must stay FP16 (KL >= threshold).
+    # pareto.py logic: cumulative quantization from sorted[0] to sorted[N-1];
+    # everything from sorted[N] onward is too sensitive → ignored (kept FP16).
+    # NNCF IgnoredScope(patterns=...) uses re.fullmatch against NNCFGraph node names.
+    ignore_patterns = build_ignore_patterns(fp16_layers_pt)
+    print(f"  FP16 ignore patterns: {len(ignore_patterns)}")
+    ignored = nncf.IgnoredScope(patterns=ignore_patterns) if ignore_patterns else None
 
-    if ir_names_to_ignore:
-        print(f"  Sample ignored nodes:")
-        for name in ir_names_to_ignore[:5]:
-            print(f"    - {name}")
-        if len(ir_names_to_ignore) > 5:
-            print(f"    ... and {len(ir_names_to_ignore) - 5} more")
-
-    # Build ignored scope
-    ignored = nncf.IgnoredScope(names=ir_names_to_ignore) if ir_names_to_ignore else None
-
-    # Compress weights
+    # Compress weights — group_size=-1 → per-channel INT4 (no minimum-size constraint,
+    # avoids fallback to INT8 that group_size=128 can trigger for smaller matrices)
     compress_kwargs = dict(
         model=ov_model,
         mode=nncf.CompressWeightsMode.INT4_SYM,
         ratio=1.0,       # compress all non-ignored layers to INT4
-        group_size=128,
+        group_size=-1,   # per-channel; avoids INT8 fallback from group_size=128
     )
     if ignored:
         compress_kwargs["ignored_scope"] = ignored
@@ -167,23 +190,26 @@ def main():
 
     core = ov.Core()
 
-    # First, verify node name mapping with the baseline model
-    print(f"\nVerifying IR node name mapping...")
+    # Inspect the baseline model to verify node visibility
+    print(f"\nInspecting IR model node coverage...")
     ov_model = core.read_model(INPUT_MODEL)
     all_pt_names = [name for name, _ in sensitivity]
     all_ir_matches = find_ir_node_names(ov_model, all_pt_names)
-    print(f"  PyTorch layers: {len(all_pt_names)}")
-    print(f"  Matched IR nodes: {len(all_ir_matches)}")
+    print(f"  PyTorch layers in sensitivity file: {len(all_pt_names)}")
+    print(f"  OV IR nodes matched by name:        {len(all_ir_matches)}")
+    print_matmul_nodes(ov_model)
 
-    if len(all_ir_matches) == 0:
-        print("\n  WARNING: No IR node names matched PyTorch layer names!")
-        print("  Dumping first 20 IR node names for debugging:")
-        for i, op in enumerate(ov_model.get_ops()):
-            if i >= 20:
-                break
-            print(f"    {op.get_friendly_name()}")
-        print("\n  You may need to adjust find_ir_node_names() mapping logic.")
-        return
+    if len(all_ir_matches) < len(all_pt_names):
+        coverage = len(all_ir_matches) / len(all_pt_names) * 100
+        print(f"\n  WARNING: Only {coverage:.0f}% of sensitivity layers found in IR.")
+        if coverage == 0:
+            print("  HINT: The model may have been saved with compress_to_fp16=True in")
+            print("  convert.py, which stores weights as FP16 constants and hides them")
+            print("  from NNCF's pattern matching.  Re-run convert.py with")
+            print("  compress_to_fp16=False, then re-run this script.")
+            return
+        print("  Remaining layers will be targeted via NNCF regex patterns.")
+        print("  For full coverage, re-export with compress_to_fp16=False in convert.py.")
 
     del ov_model  # free memory
 
