@@ -24,25 +24,18 @@ print(model)
 
 tokens = 4
 
-### ONNX
-input_ids = {'input_ids': torch.tensor([list(range(tokens))])}
-onnx_path = f"onnx_model/mamba_b_1_t_{tokens}.onnx"
-input_names = list(input_ids.keys())
-output_names = ['last_hidden_state']
- 
+### Direct PyTorch → OpenVINO conversion (no ONNX intermediate)
+# Docs: "it is recommended to set up static shapes for the inputs at the model
+# preparation stage, not at runtime, for performance and NPU compatibility."
+example_input = torch.tensor([list(range(tokens))])
+
 with torch.no_grad():
-    torch.onnx.export(
-        model=model,
-        args=(input_ids['input_ids'],),
-        f=onnx_path,
-        verbose=False,
-        input_names=input_names,
-        output_names=output_names,
-        dynamic_axes=None
-        )
+    ov_model = ov.convert_model(
+        model,
+        example_input=example_input,
+        input=[("input_ids", ov.PartialShape([1, tokens]))]
+    )
 
-
-ov_model = ov.convert_model(input_model=onnx_path)
-# save generated model file for future use
+# compress_to_fp16=False for initial debugging (removes weight compression as a variable)
 ov.save_model(ov_model, output_model=f"ov_model/mamba_b_1_t_{tokens}.xml",
-                compress_to_fp16=True)
+                compress_to_fp16=False)
