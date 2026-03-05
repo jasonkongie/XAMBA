@@ -1,5 +1,9 @@
+import os
 import torch
 import openvino as ov
+
+os.makedirs("onnx_model", exist_ok=True)
+os.makedirs("ov_models", exist_ok=True)
 
 from transformers import MambaConfig, MambaForCausalLM
 from transformers import MambaModel
