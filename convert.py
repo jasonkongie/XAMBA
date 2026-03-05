@@ -8,11 +8,12 @@ os.makedirs("ov_model", exist_ok=True)
 from transformers import MambaConfig, MambaForCausalLM
 from transformers import MambaModel
 from transformers import AutoTokenizer, AutoModel
-import transformers.models.mamba.modeling_mamba as modeling_mamba
-import torch.nn.functional as F
+from transformers.models.mamba.modeling_mamba import MambaMixer
+from modeling_mamba_npu import patched_slow_forward
 
-# Replace softplus with relu for NPU compatibility (softplus is unsupported on NPU)
-modeling_mamba.nn.functional.softplus = F.relu
+# Patch MambaMixer.slow_forward with NPU-compatible vectorized scan
+# Eliminates 16 loop-generated Gather ops → CumSum + triangular matmul
+MambaMixer.slow_forward = patched_slow_forward
 
 config = MambaConfig.from_pretrained("state-spaces/mamba-130m-hf")
 config.use_cache = False
