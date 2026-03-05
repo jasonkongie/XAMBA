@@ -8,6 +8,11 @@ os.makedirs("ov_model", exist_ok=True)
 from transformers import MambaConfig, MambaForCausalLM
 from transformers import MambaModel
 from transformers import AutoTokenizer, AutoModel
+import transformers.models.mamba.modeling_mamba as modeling_mamba
+import torch.nn.functional as F
+
+# Replace softplus with relu for NPU compatibility (softplus is unsupported on NPU)
+modeling_mamba.nn.functional.softplus = F.relu
 
 config = MambaConfig.from_pretrained("state-spaces/mamba-130m-hf")
 config.use_cache = False
