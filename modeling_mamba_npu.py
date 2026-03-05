@@ -1,23 +1,20 @@
 """
 NPU-compatible patch for Mamba-1's MambaMixer.slow_forward.
 
-Problem: The original slow_forward uses a Python for-loop over seq_len that,
-when ONNX-traced, unrolls into 16+ sequential Gather ops. The sequential
-dependency chain crashes the NPU compiler at Step 7 (model loading).
+Root cause of NPU crash: the original slow_forward's for-loop over seq_len
+unrolls (at ONNX trace time) into 16 sequential Gather ops plus a deep
+sequential dependency chain — both crash the Lunar Lake NPU compiler.
 
-Fix: Replace the for-loop SSM scan with a fully vectorized implementation
-using CumSum + triangular factor matrix. This is mathematically exact
-(no approximation) and uses only NPU-supported ops.
+Fix strategy (v3): Unrolled split-based scan
+  - Use split() instead of scalar indexing → VariadicSplit in OV, not Gather
+  - Hardcode the 4-step recurrence (tokens=4 is fixed in convert.py)
+  - Stay strictly ≤4D tensors throughout — no 5D intermediates
+  - All ops confirmed NPU-compatible from working Mamba-2 analysis
 
-Key identity used to eliminate Log op:
-    log(discrete_A) = log(exp(A * delta)) = A * delta
-So cumlog_A = cumsum(A * delta, dim=seq) = A * cumsum(delta, dim=seq)
-This means we never need to compute discrete_A or call torch.log().
+Ops introduced: VariadicSplit, Squeeze, Multiply, Add, ReduceSum, Concat
+Ops eliminated: Gather (×16), Log, Clamp, 5D Exp/Multiply
 
 Also inlines softplus -> relu (ActiBA) for NPU compatibility.
-
-Ops in final OV model: CumSum, Exp, Multiply, Subtract, ReduceSum, Unsqueeze
-All confirmed NPU-supported from Mamba-2 working model. No Log, no Gather.
 
 Usage in convert.py:
     from modeling_mamba_npu import patched_slow_forward
@@ -86,50 +83,60 @@ def patched_slow_forward(
     # ActiBA: relu instead of softplus for NPU compatibility
     discrete_time_step = nn.functional.relu(discrete_time_step).transpose(1, 2)    # [batch, d_in, seq_len]
 
-    # 3.b. Discretization (B only; A handled implicitly below via identity)
+    # 3.b. Discretization
+    A = -torch.exp(self.A_log.float())                                              # [d_in, d_state]
+    discrete_A = torch.exp(A[None, :, None, :] * discrete_time_step[:, :, :, None])# [batch, d_in, seq_len, d_state]
     discrete_B = discrete_time_step[:, :, :, None] * B[:, None, :, :].float()      # [batch, d_in, seq_len, d_state]
     deltaB_u   = discrete_B * hidden_states[:, :, :, None].float()                 # [batch, d_in, seq_len, d_state]
 
-    # 3.c. Vectorized SSM scan — no loop, no Gather, no Log
+    # 3.c. Unrolled split-based SSM scan (NPU-safe, max 4D tensors only)
     #
-    # Recurrence: h[t] = A[t]*h[t-1] + Bu[t],  h[-1] = 0
-    # Closed form: h[t] = sum_{s=0}^{t} factor[t,s] * Bu[s]
-    #   where factor[t,s] = prod_{r=s+1}^{t} discrete_A[r]
-    #                      = exp( sum_{r=s+1}^{t} log(discrete_A[r]) )
-    #                      = exp( cumlog_A[t] - cumlog_A[s] )
+    # Problem with the original for-loop:
+    #   discrete_A[:, :, i, :] → Gather op × 16 → crashes NPU compiler
     #
-    # Key identity (eliminates Log op):
-    #   log(discrete_A[r]) = log(exp(A * delta[r])) = A * delta[r]
-    #   cumlog_A[t] = sum_{r=0}^{t} A * delta[r]
-    #               = A * cumsum(delta, dim=seq)[t]   ← A factors out of sum
+    # Problem with previous vectorized approach:
+    #   factor matrix → 5D tensor [batch, d_in, seq, seq, d_state] → NPU likely
+    #   does not support 5D ops
     #
-    # Ops: CumSum, Multiply, Subtract, Exp, ReduceSum — all NPU-confirmed.
+    # This approach:
+    #   split() → VariadicSplit (1 op, NPU-confirmed) + Squeeze (standard op)
+    #   Recurrence unrolled explicitly → no loop variable, no Gather, max 4D
+    #
+    # Hardcoded for tokens=4 (seq_len is always 4 in convert.py).
+    # Each split() call produces ONE VariadicSplit node with N outputs — not N Gather nodes.
 
-    A_matrix  = -torch.exp(self.A_log.float())                                      # [d_in, d_state] — constant
-    cum_dt    = torch.cumsum(discrete_time_step, dim=2)                             # [batch, d_in, seq_len]
-    cumlog_A  = A_matrix[None, :, None, :] * cum_dt[:, :, :, None]                 # [batch, d_in, seq_len, d_state]
+    # Split all SSM tensors along the seq_len dim
+    # discrete_A/deltaB_u: split on dim=2; C: split on dim=1
+    dA  = discrete_A.split(1, dim=2)     # 4 × [batch, d_in, 1, d_state]
+    dBu = deltaB_u.split(1, dim=2)       # 4 × [batch, d_in, 1, d_state]
+    C_t = C.split(1, dim=1)              # 4 × [batch, 1, d_state]
 
-    # factor[b, d_in, t, s, d_state] = exp(cumlog_A[t] - cumlog_A[s])
-    factors = torch.exp(
-        cumlog_A.unsqueeze(3) - cumlog_A.unsqueeze(2)                              # [batch, d_in, seq_len, seq_len, d_state]
-    )
+    # Squeeze out the size-1 seq dim from each slice
+    dA  = [t.squeeze(2) for t in dA]    # 4 × [batch, d_in, d_state]
+    dBu = [t.squeeze(2) for t in dBu]   # 4 × [batch, d_in, d_state]
+    # C_t[i]: [batch, 1, d_state] — keep the dim for broadcasting with h below
 
-    # Causal lower-triangular mask: zero future positions (t < s)
-    # seq_len is static (=tokens), so tril becomes a Const node in ONNX
-    mask    = torch.tril(torch.ones(seq_len, seq_len, dtype=factors.dtype, device=factors.device))
-    factors = factors * mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1)               # [batch, d_in, seq_len, seq_len, d_state]
+    # Unrolled recurrence: h[t] = dA[t] * h[t-1] + dBu[t], h[-1] = 0
+    h0 = dBu[0]                          # [batch, d_in, d_state]
+    h1 = dA[1] * h0 + dBu[1]
+    h2 = dA[2] * h1 + dBu[2]
+    h3 = dA[3] * h2 + dBu[3]
 
-    # h[t] = sum_s factor[t,s] * Bu[s]
-    h = (factors * deltaB_u.float().unsqueeze(2)).sum(dim=3)                       # [batch, d_in, seq_len, d_state]
+    # y[t] = sum_k h[t, :, k] * C[t, k]  →  [batch, d_in]
+    # h[t]: [batch, d_in, d_state], C_t[t]: [batch, 1, d_state] → broadcasts over d_in
+    y0 = (h0 * C_t[0]).sum(-1)           # [batch, d_in]
+    y1 = (h1 * C_t[1]).sum(-1)
+    y2 = (h2 * C_t[2]).sum(-1)
+    y3 = (h3 * C_t[3]).sum(-1)
 
-    # y[t] = sum_k h[t,:,k] * C[t,k]
-    scan_output = (h * C.float().unsqueeze(1)).sum(dim=-1).to(dtype)               # [batch, d_in, seq_len]
+    # Stack outputs along the seq_len dim
+    scan_output = torch.stack([y0, y1, y2, y3], dim=-1)                            # [batch, d_in, seq_len]
 
     scan_output = scan_output + (hidden_states * self.D[None, :, None])
     scan_output = scan_output * self.act(gate)
 
     if cache_params is not None:
-        cache_params.ssm_states[self.layer_idx].copy_(h[:, :, -1, :].to(dtype))
+        cache_params.ssm_states[self.layer_idx].copy_(h3.to(dtype))
 
     # 4. Final linear projection
     contextualized_states = self.out_proj(scan_output.transpose(1, 2))             # [batch, seq_len, hidden_size]
