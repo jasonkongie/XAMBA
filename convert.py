@@ -1,22 +1,22 @@
 import torch
 import openvino as ov
 
-from transformers import Mamba2Config, Mamba2ForCausalLM
-from transformers import Mamba2Model
+from transformers import MambaConfig, MambaForCausalLM
+from transformers import MambaModel
 from transformers import AutoTokenizer, AutoModel
 
-config = Mamba2Config.from_pretrained("yuji96/mamba2-130m-hf")
+config = MambaConfig.from_pretrained("state-spaces/mamba-130m-hf")
 config.use_cache = False
 config.num_hidden_layers = 1
 
-model = Mamba2Model(config=config).eval()
+model = MambaModel(config=config).eval()
 print(model)
 
 tokens = 4
 
 ### ONNX
 input_ids = {'input_ids': torch.tensor([list(range(tokens))])}
-onnx_path = f"onnx_model/mamba2_b_1_t_{tokens}.onnx"
+onnx_path = f"onnx_model/mamba_b_1_t_{tokens}.onnx"
 input_names = list(input_ids.keys())
 output_names = ['last_hidden_state']
  
@@ -36,5 +36,5 @@ with torch.no_grad():
 
 ov_model = ov.convert_model(input_model=onnx_path)
 # save generated model file for future use
-ov.save_model(ov_model, output_model=f"ov_models/mamba2_b_1_t_{tokens}.xml",
+ov.save_model(ov_model, output_model=f"ov_models/mamba_b_1_t_{tokens}.xml",
                 compress_to_fp16=True)
