@@ -17,7 +17,7 @@ performance_counters_list = ['OFF']#, 'ON']
 nireq = -1
 
 # Folder paths
-blob_folder = "ov_model"    #"ov_model"
+blob_folder = "ov_models"
 report_folder_base = "log"     # log folder name
 
 # Create report folder if it doesn't exist
