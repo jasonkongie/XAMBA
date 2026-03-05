@@ -3,7 +3,7 @@ import torch
 import openvino as ov
 
 os.makedirs("onnx_model", exist_ok=True)
-os.makedirs("ov_models", exist_ok=True)
+os.makedirs("ov_model", exist_ok=True)
 
 from transformers import MambaConfig, MambaForCausalLM
 from transformers import MambaModel
@@ -38,5 +38,5 @@ with torch.no_grad():
 
 ov_model = ov.convert_model(input_model=onnx_path)
 # save generated model file for future use
-ov.save_model(ov_model, output_model=f"ov_models/mamba_b_1_t_{tokens}.xml",
+ov.save_model(ov_model, output_model=f"ov_model/mamba_b_1_t_{tokens}.xml",
                 compress_to_fp16=True)
