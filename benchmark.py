@@ -11,7 +11,7 @@ import shutil
 # nireq = int(input("Enter nireq value (1 or more): ").strip())
 
 # Devices and hints
-devices = ["NPU"] #["CPU", "GPU", "NPU"]
+devices = ["CPU", "NPU"] #["CPU", "GPU", "NPU"]
 hints = ["latency"] #, "tput"]
 performance_counters_list = ['OFF']#, 'ON']
 nireq = -1
