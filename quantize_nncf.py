@@ -21,9 +21,9 @@ import nncf
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
-INPUT_MODEL = "ov_model/mamba2-130m-hf.xml"
+INPUT_MODEL = "ov_models/mamba2-130m-hf.xml"
 SENSITIVITY_FILE = "sensitivity_results_mamba2-130m_4bits.json"
-OUTPUT_DIR = "ov_model"
+OUTPUT_DIR = "ov_models"
 
 # 4 Pareto points: KL threshold → layers with KL >= threshold stay FP16
 PARETO_POINTS = {
