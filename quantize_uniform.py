@@ -1,31 +1,39 @@
 """
 quantize_uniform.py
 
-Creates two uniform-precision quantized models for comparison baselines:
-  - mamba2_uniform_int8.xml  : all layers INT8_SYM (no mixed precision)
-  - mamba2_uniform_int4.xml  : all layers INT4_SYM (no mixed precision)
+Creates uniform-precision quantized models for each base model:
+  - {model}_uniform_int8.xml  : all layers INT8_SYM
+  - {model}_uniform_int4.xml  : all layers INT4_SYM
 
 These serve as the two endpoints of the Pareto curve:
   uniform INT8  →  best quality,  larger size
   uniform INT4  →  smallest size, lowest quality
-  pointA–D      →  mixed-precision sweet spots in between
+  mixed points  →  sweet spots in between
 
 Usage:
     python quantize_uniform.py
-
-Prerequisites:
-    - ov_models/mamba2-130m-hf.xml  (produced by convert.py)
-    - pip install nncf openvino
 """
 
 import os
 import openvino as ov
 import nncf
 
-# ── Configuration ────────────────────────────────────────────────────────────
+# ── Model Registry ───────────────────────────────────────────────────────────
 
-INPUT_MODEL = "ov_models/mamba2-130m-hf.xml"
-OUTPUT_DIR  = "ov_models"
+MODEL_REGISTRY = {
+    "mamba-130m-hf": {
+        "hf_id": "state-spaces/mamba-130m-hf",
+        "sensitivity_4bit": "mamba130m_sensitivity_results_4bits.json",
+        "sensitivity_8bit": "mamba130m_sensitivity_results_8bits.json",
+    },
+    "mamba-1.4b-hf": {
+        "hf_id": "state-spaces/mamba-1.4b-hf",
+        "sensitivity_4bit": "mamba1_4b_sensitivity_results_4bits.json",
+        "sensitivity_8bit": "mamba1_4b_sensitivity_results_8bits.json",
+    },
+}
+
+OUTPUT_DIR = "ov_models"
 
 CONFIGS = {
     "uniform_int8": dict(
@@ -42,38 +50,36 @@ CONFIGS = {
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    if not os.path.exists(INPUT_MODEL):
-        print(f"Error: {INPUT_MODEL} not found. Run convert.py first.")
-        return
-
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     core = ov.Core()
 
-    for name, kwargs in CONFIGS.items():
-        print(f"\n{'='*55}")
-        print(f"  Quantizing: {name}  (mode: {kwargs['mode']})")
-        print(f"{'='*55}")
+    for model_name in MODEL_REGISTRY:
+        input_model = os.path.join(OUTPUT_DIR, f"{model_name}.xml")
+        if not os.path.exists(input_model):
+            print(f"[!] Baseline model not found: {input_model}  — run convert.py first")
+            continue
 
-        ov_model = core.read_model(INPUT_MODEL)
+        for suffix, kwargs in CONFIGS.items():
+            print(f"\n{'='*55}")
+            print(f"  {model_name} → {suffix}  (mode: {kwargs['mode']})")
+            print(f"{'='*55}")
 
-        compressed = nncf.compress_weights(model=ov_model, **kwargs)
+            ov_model   = core.read_model(input_model)
+            compressed = nncf.compress_weights(model=ov_model, **kwargs)
 
-        output_path = os.path.join(OUTPUT_DIR, f"mamba2_{name}.xml")
-        ov.save_model(compressed, output_path, compress_to_fp16=True)
-        print(f"  Saved: {output_path}")
+            output_path = os.path.join(OUTPUT_DIR, f"{model_name}_{suffix}.xml")
+            ov.save_model(compressed, output_path, compress_to_fp16=True)
 
-        bin_path = output_path.replace(".xml", ".bin")
-        if os.path.exists(bin_path):
-            size_mb = os.path.getsize(bin_path) / (1024 * 1024)
-            print(f"  Bin size: {size_mb:.1f} MB")
+            bin_path = output_path.replace(".xml", ".bin")
+            if os.path.exists(bin_path):
+                size_mb = os.path.getsize(bin_path) / (1024 * 1024)
+                print(f"  Saved: {output_path}  ({size_mb:.1f} MB)")
 
     print(f"\n{'='*55}")
-    print("Done! Models saved:")
-    for name in CONFIGS:
-        print(f"  ov_models/mamba2_{name}.xml")
-    print("\nAdd these to your benchmark bash script:")
-    for name in CONFIGS:
-        print(f"  benchmark_app -m ov_models/mamba2_{name}.xml -d CPU -hint latency -t 30 \\")
-        print(f"    2>&1 | tee log/benchmark_log/mamba2_{name}_CPU_latency.txt")
+    print("Done! Uniform baselines generated:")
+    for model_name in MODEL_REGISTRY:
+        for suffix in CONFIGS:
+            print(f"  ov_models/{model_name}_{suffix}.xml")
 
 
 if __name__ == "__main__":

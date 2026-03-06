@@ -10,7 +10,7 @@ os.makedirs("ov_models", exist_ok=True)
 
 MODELS = [
     "state-spaces/mamba-130m-hf",
-    "state-spaces/mamba-370m-hf",
+    "state-spaces/mamba-1.4b-hf",
 ]
 
 tokens = 4

@@ -1,0 +1,681 @@
+{
+  "backbone.layers.0.mixer.in_proj": {
+    "sqnr_db": 38.982882499694824,
+    "kl_teacher_to_student": 491021760.0,
+    "kl_student_to_teacher": 0.07226237654685974,
+    "delta_cross_entropy": -0.0041522979736328125,
+    "perplexity": 26.258815151232334
+  },
+  "backbone.layers.0.mixer.x_proj": {
+    "sqnr_db": 43.27863693237305,
+    "kl_teacher_to_student": 491012672.0,
+    "kl_student_to_teacher": 0.04644788056612015,
+    "delta_cross_entropy": 0.008292198181152344,
+    "perplexity": 26.253001525290955
+  },
+  "backbone.layers.0.mixer.dt_proj": {
+    "sqnr_db": 51.12717628479004,
+    "kl_teacher_to_student": 490994656.0,
+    "kl_student_to_teacher": 0.0387674942612648,
+    "delta_cross_entropy": 0.0013437271118164062,
+    "perplexity": 26.252162903840873
+  },
+  "backbone.layers.0.mixer.out_proj": {
+    "sqnr_db": 40.82818031311035,
+    "kl_teacher_to_student": 491004672.0,
+    "kl_student_to_teacher": 0.059112392365932465,
+    "delta_cross_entropy": 0.004652976989746094,
+    "perplexity": 26.255749920409727
+  },
+  "backbone.layers.1.mixer.in_proj": {
+    "sqnr_db": 44.95691776275635,
+    "kl_teacher_to_student": 491011040.0,
+    "kl_student_to_teacher": 0.04325626790523529,
+    "delta_cross_entropy": 0.000553131103515625,
+    "perplexity": 26.253218304311364
+  },
+  "backbone.layers.1.mixer.x_proj": {
+    "sqnr_db": 48.45126152038574,
+    "kl_teacher_to_student": 491007264.0,
+    "kl_student_to_teacher": 0.040244363248348236,
+    "delta_cross_entropy": 0.0008497238159179688,
+    "perplexity": 26.253727745878322
+  },
+  "backbone.layers.1.mixer.dt_proj": {
+    "sqnr_db": 51.736788749694824,
+    "kl_teacher_to_student": 491001664.0,
+    "kl_student_to_teacher": 0.03834417462348938,
+    "delta_cross_entropy": 0.0027990341186523438,
+    "perplexity": 26.252483072871684
+  },
+  "backbone.layers.1.mixer.out_proj": {
+    "sqnr_db": 46.10347270965576,
+    "kl_teacher_to_student": 490986624.0,
+    "kl_student_to_teacher": 0.041577331721782684,
+    "delta_cross_entropy": -0.0022821426391601562,
+    "perplexity": 26.252738317585862
+  },
+  "backbone.layers.2.mixer.in_proj": {
+    "sqnr_db": 44.5155668258667,
+    "kl_teacher_to_student": 491005824.0,
+    "kl_student_to_teacher": 0.04312916472554207,
+    "delta_cross_entropy": 0.0015592575073242188,
+    "perplexity": 26.25328712982976
+  },
+  "backbone.layers.2.mixer.x_proj": {
+    "sqnr_db": 46.81948184967041,
+    "kl_teacher_to_student": 490991552.0,
+    "kl_student_to_teacher": 0.04124593362212181,
+    "delta_cross_entropy": 0.0016498565673828125,
+    "perplexity": 26.25310386265422
+  },
+  "backbone.layers.2.mixer.dt_proj": {
+    "sqnr_db": 51.4615535736084,
+    "kl_teacher_to_student": 491002048.0,
+    "kl_student_to_teacher": 0.03870895132422447,
+    "delta_cross_entropy": 0.0008897781372070312,
+    "perplexity": 26.25359838341579
+  },
+  "backbone.layers.2.mixer.out_proj": {
+    "sqnr_db": 48.23455810546875,
+    "kl_teacher_to_student": 491024640.0,
+    "kl_student_to_teacher": 0.041812486946582794,
+    "delta_cross_entropy": 0.0038976669311523438,
+    "perplexity": 26.25307935640222
+  },
+  "backbone.layers.3.mixer.in_proj": {
+    "sqnr_db": 46.66917324066162,
+    "kl_teacher_to_student": 490979808.0,
+    "kl_student_to_teacher": 0.04231339693069458,
+    "delta_cross_entropy": 0.00039768218994140625,
+    "perplexity": 26.25350769582529
+  },
+  "backbone.layers.3.mixer.x_proj": {
+    "sqnr_db": 49.83570098876953,
+    "kl_teacher_to_student": 491001472.0,
+    "kl_student_to_teacher": 0.03960692882537842,
+    "delta_cross_entropy": -0.0001201629638671875,
+    "perplexity": 26.25332085654404
+  },
+  "backbone.layers.3.mixer.dt_proj": {
+    "sqnr_db": 53.10001850128174,
+    "kl_teacher_to_student": 490997824.0,
+    "kl_student_to_teacher": 0.038426078855991364,
+    "delta_cross_entropy": -0.00103759765625,
+    "perplexity": 26.253531550958026
+  },
+  "backbone.layers.3.mixer.out_proj": {
+    "sqnr_db": 48.86374473571777,
+    "kl_teacher_to_student": 490993792.0,
+    "kl_student_to_teacher": 0.040707021951675415,
+    "delta_cross_entropy": -0.0031147003173828125,
+    "perplexity": 26.25296982871589
+  },
+  "backbone.layers.4.mixer.in_proj": {
+    "sqnr_db": 43.75509262084961,
+    "kl_teacher_to_student": 491003744.0,
+    "kl_student_to_teacher": 0.043337851762771606,
+    "delta_cross_entropy": 0.003200531005859375,
+    "perplexity": 26.252846486733606
+  },
+  "backbone.layers.4.mixer.x_proj": {
+    "sqnr_db": 49.08079147338867,
+    "kl_teacher_to_student": 491004768.0,
+    "kl_student_to_teacher": 0.04001069441437721,
+    "delta_cross_entropy": -0.0025415420532226562,
+    "perplexity": 26.2535413636882
+  },
+  "backbone.layers.4.mixer.dt_proj": {
+    "sqnr_db": 52.69761085510254,
+    "kl_teacher_to_student": 491000832.0,
+    "kl_student_to_teacher": 0.03829645738005638,
+    "delta_cross_entropy": -0.0019550323486328125,
+    "perplexity": 26.253005759457483
+  },
+  "backbone.layers.4.mixer.out_proj": {
+    "sqnr_db": 46.581645011901855,
+    "kl_teacher_to_student": 490994880.0,
+    "kl_student_to_teacher": 0.04141717031598091,
+    "delta_cross_entropy": 0.0015020370483398438,
+    "perplexity": 26.252430512993918
+  },
+  "backbone.layers.5.mixer.in_proj": {
+    "sqnr_db": 47.02261447906494,
+    "kl_teacher_to_student": 490978208.0,
+    "kl_student_to_teacher": 0.0418977364897728,
+    "delta_cross_entropy": 0.0013723373413085938,
+    "perplexity": 26.253488174449917
+  },
+  "backbone.layers.5.mixer.x_proj": {
+    "sqnr_db": 50.154123306274414,
+    "kl_teacher_to_student": 490994368.0,
+    "kl_student_to_teacher": 0.03951462358236313,
+    "delta_cross_entropy": 0.0009059906005859375,
+    "perplexity": 26.254177915139888
+  },
+  "backbone.layers.5.mixer.dt_proj": {
+    "sqnr_db": 53.098106384277344,
+    "kl_teacher_to_student": 490996928.0,
+    "kl_student_to_teacher": 0.038370952010154724,
+    "delta_cross_entropy": -0.0021772384643554688,
+    "perplexity": 26.253501822303605
+  },
+  "backbone.layers.5.mixer.out_proj": {
+    "sqnr_db": 48.7581729888916,
+    "kl_teacher_to_student": 490992224.0,
+    "kl_student_to_teacher": 0.04104775935411453,
+    "delta_cross_entropy": -0.0008382797241210938,
+    "perplexity": 26.253601527003642
+  },
+  "backbone.layers.6.mixer.in_proj": {
+    "sqnr_db": 46.33115291595459,
+    "kl_teacher_to_student": 491000160.0,
+    "kl_student_to_teacher": 0.04272371158003807,
+    "delta_cross_entropy": 0.00051116943359375,
+    "perplexity": 26.25316225831691
+  },
+  "backbone.layers.6.mixer.x_proj": {
+    "sqnr_db": 51.07720375061035,
+    "kl_teacher_to_student": 491001920.0,
+    "kl_student_to_teacher": 0.039222605526447296,
+    "delta_cross_entropy": -0.0009431838989257812,
+    "perplexity": 26.25282916103695
+  },
+  "backbone.layers.6.mixer.dt_proj": {
+    "sqnr_db": 53.132781982421875,
+    "kl_teacher_to_student": 491000704.0,
+    "kl_student_to_teacher": 0.03841257840394974,
+    "delta_cross_entropy": -0.001190185546875,
+    "perplexity": 26.25231102842936
+  },
+  "backbone.layers.6.mixer.out_proj": {
+    "sqnr_db": 48.36867809295654,
+    "kl_teacher_to_student": 491004032.0,
+    "kl_student_to_teacher": 0.041097596287727356,
+    "delta_cross_entropy": -0.0028181076049804688,
+    "perplexity": 26.25398683531096
+  },
+  "backbone.layers.7.mixer.in_proj": {
+    "sqnr_db": 46.50054931640625,
+    "kl_teacher_to_student": 490980928.0,
+    "kl_student_to_teacher": 0.04292939603328705,
+    "delta_cross_entropy": -0.00173187255859375,
+    "perplexity": 26.2536730262217
+  },
+  "backbone.layers.7.mixer.x_proj": {
+    "sqnr_db": 49.821109771728516,
+    "kl_teacher_to_student": 490996032.0,
+    "kl_student_to_teacher": 0.03940461575984955,
+    "delta_cross_entropy": 0.0001888275146484375,
+    "perplexity": 26.253057938919433
+  },
+  "backbone.layers.7.mixer.dt_proj": {
+    "sqnr_db": 53.225226402282715,
+    "kl_teacher_to_student": 491000032.0,
+    "kl_student_to_teacher": 0.03819122165441513,
+    "delta_cross_entropy": -9.5367431640625e-05,
+    "perplexity": 26.253014675858775
+  },
+  "backbone.layers.7.mixer.out_proj": {
+    "sqnr_db": 47.724127769470215,
+    "kl_teacher_to_student": 491017792.0,
+    "kl_student_to_teacher": 0.04146821051836014,
+    "delta_cross_entropy": 0.0029544830322265625,
+    "perplexity": 26.25290635621371
+  },
+  "backbone.layers.8.mixer.in_proj": {
+    "sqnr_db": 47.39757537841797,
+    "kl_teacher_to_student": 490995936.0,
+    "kl_student_to_teacher": 0.041927315294742584,
+    "delta_cross_entropy": -0.002384185791015625,
+    "perplexity": 26.252347278100952
+  },
+  "backbone.layers.8.mixer.x_proj": {
+    "sqnr_db": 50.02316474914551,
+    "kl_teacher_to_student": 490987136.0,
+    "kl_student_to_teacher": 0.03971806913614273,
+    "delta_cross_entropy": -0.0011959075927734375,
+    "perplexity": 26.253098679220024
+  },
+  "backbone.layers.8.mixer.dt_proj": {
+    "sqnr_db": 53.111653327941895,
+    "kl_teacher_to_student": 490999488.0,
+    "kl_student_to_teacher": 0.038100630044937134,
+    "delta_cross_entropy": 0.0023822784423828125,
+    "perplexity": 26.25318718428964
+  },
+  "backbone.layers.8.mixer.out_proj": {
+    "sqnr_db": 48.238162994384766,
+    "kl_teacher_to_student": 491003904.0,
+    "kl_student_to_teacher": 0.04065325856208801,
+    "delta_cross_entropy": 0.000141143798828125,
+    "perplexity": 26.251962853643892
+  },
+  "backbone.layers.9.mixer.in_proj": {
+    "sqnr_db": 46.316261291503906,
+    "kl_teacher_to_student": 490981184.0,
+    "kl_student_to_teacher": 0.04197930544614792,
+    "delta_cross_entropy": 0.000244140625,
+    "perplexity": 26.254240743640796
+  },
+  "backbone.layers.9.mixer.x_proj": {
+    "sqnr_db": 50.3467321395874,
+    "kl_teacher_to_student": 490984512.0,
+    "kl_student_to_teacher": 0.03944343328475952,
+    "delta_cross_entropy": -0.0005559921264648438,
+    "perplexity": 26.252451748833384
+  },
+  "backbone.layers.9.mixer.dt_proj": {
+    "sqnr_db": 53.588857650756836,
+    "kl_teacher_to_student": 490996480.0,
+    "kl_student_to_teacher": 0.0382082499563694,
+    "delta_cross_entropy": -0.00018024444580078125,
+    "perplexity": 26.252102090263786
+  },
+  "backbone.layers.9.mixer.out_proj": {
+    "sqnr_db": 49.21712875366211,
+    "kl_teacher_to_student": 490986880.0,
+    "kl_student_to_teacher": 0.04074277728796005,
+    "delta_cross_entropy": -0.00162506103515625,
+    "perplexity": 26.252547441400537
+  },
+  "backbone.layers.10.mixer.in_proj": {
+    "sqnr_db": 48.106722831726074,
+    "kl_teacher_to_student": 490996608.0,
+    "kl_student_to_teacher": 0.04175403714179993,
+    "delta_cross_entropy": -0.0039005279541015625,
+    "perplexity": 26.25338186020322
+  },
+  "backbone.layers.10.mixer.x_proj": {
+    "sqnr_db": 46.605262756347656,
+    "kl_teacher_to_student": 490998752.0,
+    "kl_student_to_teacher": 0.04294164478778839,
+    "delta_cross_entropy": -0.0008716583251953125,
+    "perplexity": 26.252931144588135
+  },
+  "backbone.layers.10.mixer.dt_proj": {
+    "sqnr_db": 53.772215843200684,
+    "kl_teacher_to_student": 491006272.0,
+    "kl_student_to_teacher": 0.037772681564092636,
+    "delta_cross_entropy": -0.0005388259887695312,
+    "perplexity": 26.253214970606976
+  },
+  "backbone.layers.10.mixer.out_proj": {
+    "sqnr_db": 49.684743881225586,
+    "kl_teacher_to_student": 491008512.0,
+    "kl_student_to_teacher": 0.04039479047060013,
+    "delta_cross_entropy": 0.0005893707275390625,
+    "perplexity": 26.253163744548054
+  },
+  "backbone.layers.11.mixer.in_proj": {
+    "sqnr_db": 47.119269371032715,
+    "kl_teacher_to_student": 490964640.0,
+    "kl_student_to_teacher": 0.0423794724047184,
+    "delta_cross_entropy": -0.0035762786865234375,
+    "perplexity": 26.253681641053447
+  },
+  "backbone.layers.11.mixer.x_proj": {
+    "sqnr_db": 40.400919914245605,
+    "kl_teacher_to_student": 490997952.0,
+    "kl_student_to_teacher": 0.041923537850379944,
+    "delta_cross_entropy": 0.0003108978271484375,
+    "perplexity": 26.254026534914058
+  },
+  "backbone.layers.11.mixer.dt_proj": {
+    "sqnr_db": 52.75421142578125,
+    "kl_teacher_to_student": 490998208.0,
+    "kl_student_to_teacher": 0.03818521648645401,
+    "delta_cross_entropy": -0.0043888092041015625,
+    "perplexity": 26.253174224005036
+  },
+  "backbone.layers.11.mixer.out_proj": {
+    "sqnr_db": 48.514814376831055,
+    "kl_teacher_to_student": 491028032.0,
+    "kl_student_to_teacher": 0.041281718760728836,
+    "delta_cross_entropy": -0.000171661376953125,
+    "perplexity": 26.252256260477967
+  },
+  "backbone.layers.12.mixer.in_proj": {
+    "sqnr_db": 45.943355560302734,
+    "kl_teacher_to_student": 491043488.0,
+    "kl_student_to_teacher": 0.04244738072156906,
+    "delta_cross_entropy": 0.0026063919067382812,
+    "perplexity": 26.254101161611455
+  },
+  "backbone.layers.12.mixer.x_proj": {
+    "sqnr_db": 42.968125343322754,
+    "kl_teacher_to_student": 491006272.0,
+    "kl_student_to_teacher": 0.045033447444438934,
+    "delta_cross_entropy": 0.0016880035400390625,
+    "perplexity": 26.25399011972986
+  },
+  "backbone.layers.12.mixer.dt_proj": {
+    "sqnr_db": 50.20181655883789,
+    "kl_teacher_to_student": 490994208.0,
+    "kl_student_to_teacher": 0.038708463311195374,
+    "delta_cross_entropy": -0.0009174346923828125,
+    "perplexity": 26.25317647389405
+  },
+  "backbone.layers.12.mixer.out_proj": {
+    "sqnr_db": 50.31966209411621,
+    "kl_teacher_to_student": 491013952.0,
+    "kl_student_to_teacher": 0.040509775280952454,
+    "delta_cross_entropy": 0.0024442672729492188,
+    "perplexity": 26.252397664861405
+  },
+  "backbone.layers.13.mixer.in_proj": {
+    "sqnr_db": 45.978097915649414,
+    "kl_teacher_to_student": 491003392.0,
+    "kl_student_to_teacher": 0.04301782697439194,
+    "delta_cross_entropy": 0.00037670135498046875,
+    "perplexity": 26.253032545706713
+  },
+  "backbone.layers.13.mixer.x_proj": {
+    "sqnr_db": 50.04125118255615,
+    "kl_teacher_to_student": 491044480.0,
+    "kl_student_to_teacher": 0.04053635895252228,
+    "delta_cross_entropy": 0.0023517608642578125,
+    "perplexity": 26.252993391530964
+  },
+  "backbone.layers.13.mixer.dt_proj": {
+    "sqnr_db": 52.34745979309082,
+    "kl_teacher_to_student": 490994496.0,
+    "kl_student_to_teacher": 0.03810804337263107,
+    "delta_cross_entropy": -0.0039615631103515625,
+    "perplexity": 26.25361156084141
+  },
+  "backbone.layers.13.mixer.out_proj": {
+    "sqnr_db": 48.50240230560303,
+    "kl_teacher_to_student": 490992768.0,
+    "kl_student_to_teacher": 0.04172448441386223,
+    "delta_cross_entropy": 0.001678466796875,
+    "perplexity": 26.252619426992677
+  },
+  "backbone.layers.14.mixer.in_proj": {
+    "sqnr_db": 46.6962194442749,
+    "kl_teacher_to_student": 490998464.0,
+    "kl_student_to_teacher": 0.04342031851410866,
+    "delta_cross_entropy": -0.000255584716796875,
+    "perplexity": 26.252706155735293
+  },
+  "backbone.layers.14.mixer.x_proj": {
+    "sqnr_db": 49.00326728820801,
+    "kl_teacher_to_student": 490983648.0,
+    "kl_student_to_teacher": 0.042360398918390274,
+    "delta_cross_entropy": 0.0021677017211914062,
+    "perplexity": 26.253826040383665
+  },
+  "backbone.layers.14.mixer.dt_proj": {
+    "sqnr_db": 54.09961223602295,
+    "kl_teacher_to_student": 491002688.0,
+    "kl_student_to_teacher": 0.0381084680557251,
+    "delta_cross_entropy": -0.001132965087890625,
+    "perplexity": 26.2536090221917
+  },
+  "backbone.layers.14.mixer.out_proj": {
+    "sqnr_db": 48.74603271484375,
+    "kl_teacher_to_student": 490983680.0,
+    "kl_student_to_teacher": 0.04158053174614906,
+    "delta_cross_entropy": -0.0025806427001953125,
+    "perplexity": 26.25460801786177
+  },
+  "backbone.layers.15.mixer.in_proj": {
+    "sqnr_db": 46.46562576293945,
+    "kl_teacher_to_student": 491016320.0,
+    "kl_student_to_teacher": 0.04303450882434845,
+    "delta_cross_entropy": 0.00021839141845703125,
+    "perplexity": 26.2531265790428
+  },
+  "backbone.layers.15.mixer.x_proj": {
+    "sqnr_db": 46.47967338562012,
+    "kl_teacher_to_student": 491013824.0,
+    "kl_student_to_teacher": 0.04249158501625061,
+    "delta_cross_entropy": -0.0006999969482421875,
+    "perplexity": 26.252994930246487
+  },
+  "backbone.layers.15.mixer.dt_proj": {
+    "sqnr_db": 53.355159759521484,
+    "kl_teacher_to_student": 490991680.0,
+    "kl_student_to_teacher": 0.03859993815422058,
+    "delta_cross_entropy": 0.0012655258178710938,
+    "perplexity": 26.252596324191316
+  },
+  "backbone.layers.15.mixer.out_proj": {
+    "sqnr_db": 49.40746307373047,
+    "kl_teacher_to_student": 490984320.0,
+    "kl_student_to_teacher": 0.04065195098519325,
+    "delta_cross_entropy": -0.00106048583984375,
+    "perplexity": 26.252766699529968
+  },
+  "backbone.layers.16.mixer.in_proj": {
+    "sqnr_db": 47.73238658905029,
+    "kl_teacher_to_student": 490970944.0,
+    "kl_student_to_teacher": 0.04313446208834648,
+    "delta_cross_entropy": 0.0006570816040039062,
+    "perplexity": 26.253904673928997
+  },
+  "backbone.layers.16.mixer.x_proj": {
+    "sqnr_db": 45.27660369873047,
+    "kl_teacher_to_student": 490993600.0,
+    "kl_student_to_teacher": 0.04796600714325905,
+    "delta_cross_entropy": 0.0020046234130859375,
+    "perplexity": 26.253068353805887
+  },
+  "backbone.layers.16.mixer.dt_proj": {
+    "sqnr_db": 52.82377243041992,
+    "kl_teacher_to_student": 490995424.0,
+    "kl_student_to_teacher": 0.03911490738391876,
+    "delta_cross_entropy": -0.0003757476806640625,
+    "perplexity": 26.253363655541772
+  },
+  "backbone.layers.16.mixer.out_proj": {
+    "sqnr_db": 49.87858772277832,
+    "kl_teacher_to_student": 490981568.0,
+    "kl_student_to_teacher": 0.04068504273891449,
+    "delta_cross_entropy": -0.000209808349609375,
+    "perplexity": 26.253250862572607
+  },
+  "backbone.layers.17.mixer.in_proj": {
+    "sqnr_db": 47.18362808227539,
+    "kl_teacher_to_student": 491000352.0,
+    "kl_student_to_teacher": 0.04217293858528137,
+    "delta_cross_entropy": 0.002422332763671875,
+    "perplexity": 26.25251790681889
+  },
+  "backbone.layers.17.mixer.x_proj": {
+    "sqnr_db": 42.65550136566162,
+    "kl_teacher_to_student": 490978976.0,
+    "kl_student_to_teacher": 0.04858991503715515,
+    "delta_cross_entropy": -0.0009975433349609375,
+    "perplexity": 26.254728748748544
+  },
+  "backbone.layers.17.mixer.dt_proj": {
+    "sqnr_db": 50.3727912902832,
+    "kl_teacher_to_student": 490999840.0,
+    "kl_student_to_teacher": 0.03885318338871002,
+    "delta_cross_entropy": 0.0011682510375976562,
+    "perplexity": 26.25310473783347
+  },
+  "backbone.layers.17.mixer.out_proj": {
+    "sqnr_db": 48.90643119812012,
+    "kl_teacher_to_student": 490996352.0,
+    "kl_student_to_teacher": 0.04067453742027283,
+    "delta_cross_entropy": -0.00030612945556640625,
+    "perplexity": 26.253737066615056
+  },
+  "backbone.layers.18.mixer.in_proj": {
+    "sqnr_db": 44.12111759185791,
+    "kl_teacher_to_student": 490920768.0,
+    "kl_student_to_teacher": 0.04770359396934509,
+    "delta_cross_entropy": -0.0043792724609375,
+    "perplexity": 26.254185188887487
+  },
+  "backbone.layers.18.mixer.x_proj": {
+    "sqnr_db": 46.25084400177002,
+    "kl_teacher_to_student": 490986848.0,
+    "kl_student_to_teacher": 0.047870904207229614,
+    "delta_cross_entropy": -0.0030374526977539062,
+    "perplexity": 26.25476118625055
+  },
+  "backbone.layers.18.mixer.dt_proj": {
+    "sqnr_db": 54.70762252807617,
+    "kl_teacher_to_student": 491003072.0,
+    "kl_student_to_teacher": 0.038083773106336594,
+    "delta_cross_entropy": 0.0009317398071289062,
+    "perplexity": 26.253653320886254
+  },
+  "backbone.layers.18.mixer.out_proj": {
+    "sqnr_db": 47.4116325378418,
+    "kl_teacher_to_student": 490976864.0,
+    "kl_student_to_teacher": 0.04275074601173401,
+    "delta_cross_entropy": -0.0029964447021484375,
+    "perplexity": 26.254006874443203
+  },
+  "backbone.layers.19.mixer.in_proj": {
+    "sqnr_db": 43.57966899871826,
+    "kl_teacher_to_student": 490923744.0,
+    "kl_student_to_teacher": 0.04803070053458214,
+    "delta_cross_entropy": -0.0011835098266601562,
+    "perplexity": 26.252264379485972
+  },
+  "backbone.layers.19.mixer.x_proj": {
+    "sqnr_db": 43.738555908203125,
+    "kl_teacher_to_student": 491008064.0,
+    "kl_student_to_teacher": 0.0636834129691124,
+    "delta_cross_entropy": -0.005356788635253906,
+    "perplexity": 26.254826335379065
+  },
+  "backbone.layers.19.mixer.dt_proj": {
+    "sqnr_db": 52.33961582183838,
+    "kl_teacher_to_student": 491016576.0,
+    "kl_student_to_teacher": 0.03867564722895622,
+    "delta_cross_entropy": -0.00072479248046875,
+    "perplexity": 26.25293883213132
+  },
+  "backbone.layers.19.mixer.out_proj": {
+    "sqnr_db": 45.75488090515137,
+    "kl_teacher_to_student": 490966272.0,
+    "kl_student_to_teacher": 0.044586457312107086,
+    "delta_cross_entropy": -0.003597259521484375,
+    "perplexity": 26.252794255924595
+  },
+  "backbone.layers.20.mixer.in_proj": {
+    "sqnr_db": 43.761186599731445,
+    "kl_teacher_to_student": 491078688.0,
+    "kl_student_to_teacher": 0.05323328822851181,
+    "delta_cross_entropy": 0.0012006759643554688,
+    "perplexity": 26.25413966839509
+  },
+  "backbone.layers.20.mixer.x_proj": {
+    "sqnr_db": 46.92995548248291,
+    "kl_teacher_to_student": 490956352.0,
+    "kl_student_to_teacher": 0.05824973061680794,
+    "delta_cross_entropy": 0.003509521484375,
+    "perplexity": 26.25555831203424
+  },
+  "backbone.layers.20.mixer.dt_proj": {
+    "sqnr_db": 53.56002330780029,
+    "kl_teacher_to_student": 490985024.0,
+    "kl_student_to_teacher": 0.03894158452749252,
+    "delta_cross_entropy": 0.0022068023681640625,
+    "perplexity": 26.253336738963093
+  },
+  "backbone.layers.20.mixer.out_proj": {
+    "sqnr_db": 44.04029846191406,
+    "kl_teacher_to_student": 490995552.0,
+    "kl_student_to_teacher": 0.05124593898653984,
+    "delta_cross_entropy": 0.0029821395874023438,
+    "perplexity": 26.25331653362537
+  },
+  "backbone.layers.21.mixer.in_proj": {
+    "sqnr_db": 37.61443376541138,
+    "kl_teacher_to_student": 491057632.0,
+    "kl_student_to_teacher": 0.04898753762245178,
+    "delta_cross_entropy": 0.0030431747436523438,
+    "perplexity": 26.252185066482323
+  },
+  "backbone.layers.21.mixer.x_proj": {
+    "sqnr_db": 45.79973220825195,
+    "kl_teacher_to_student": 491133664.0,
+    "kl_student_to_teacher": 0.043346427381038666,
+    "delta_cross_entropy": 0.0021915435791015625,
+    "perplexity": 26.25307509556179
+  },
+  "backbone.layers.21.mixer.dt_proj": {
+    "sqnr_db": 52.22781181335449,
+    "kl_teacher_to_student": 491006912.0,
+    "kl_student_to_teacher": 0.03736540302634239,
+    "delta_cross_entropy": -0.002445220947265625,
+    "perplexity": 26.25383827020115
+  },
+  "backbone.layers.21.mixer.out_proj": {
+    "sqnr_db": 46.82955265045166,
+    "kl_teacher_to_student": 490807872.0,
+    "kl_student_to_teacher": 0.05345338582992554,
+    "delta_cross_entropy": -0.0013065338134765625,
+    "perplexity": 26.255052740759268
+  },
+  "backbone.layers.22.mixer.in_proj": {
+    "sqnr_db": 41.65968894958496,
+    "kl_teacher_to_student": 490817824.0,
+    "kl_student_to_teacher": 0.05703748017549515,
+    "delta_cross_entropy": -0.005710601806640625,
+    "perplexity": 26.255431408825732
+  },
+  "backbone.layers.22.mixer.x_proj": {
+    "sqnr_db": 51.597867012023926,
+    "kl_teacher_to_student": 491046592.0,
+    "kl_student_to_teacher": 0.04029097780585289,
+    "delta_cross_entropy": 0.004786491394042969,
+    "perplexity": 26.253785325409584
+  },
+  "backbone.layers.22.mixer.dt_proj": {
+    "sqnr_db": 55.91419219970703,
+    "kl_teacher_to_student": 490980832.0,
+    "kl_student_to_teacher": 0.03709178417921066,
+    "delta_cross_entropy": -0.0023365020751953125,
+    "perplexity": 26.25360162151566
+  },
+  "backbone.layers.22.mixer.out_proj": {
+    "sqnr_db": 51.886024475097656,
+    "kl_teacher_to_student": 490923520.0,
+    "kl_student_to_teacher": 0.08554310351610184,
+    "delta_cross_entropy": 0.0033388137817382812,
+    "perplexity": 26.255478950897988
+  },
+  "backbone.layers.23.mixer.in_proj": {
+    "sqnr_db": 49.223031997680664,
+    "kl_teacher_to_student": 491196192.0,
+    "kl_student_to_teacher": 0.09062475711107254,
+    "delta_cross_entropy": -0.003086090087890625,
+    "perplexity": 26.256788625269998
+  },
+  "backbone.layers.23.mixer.x_proj": {
+    "sqnr_db": 55.794148445129395,
+    "kl_teacher_to_student": 491349184.0,
+    "kl_student_to_teacher": 0.04193594306707382,
+    "delta_cross_entropy": 0.0076351165771484375,
+    "perplexity": 26.25370178390598
+  },
+  "backbone.layers.23.mixer.dt_proj": {
+    "sqnr_db": 59.36904430389404,
+    "kl_teacher_to_student": 490930272.0,
+    "kl_student_to_teacher": 0.03801098093390465,
+    "delta_cross_entropy": 0.00047588348388671875,
+    "perplexity": 26.25325676280409
+  },
+  "backbone.layers.23.mixer.out_proj": {
+    "sqnr_db": 45.61106204986572,
+    "kl_teacher_to_student": 490774464.0,
+    "kl_student_to_teacher": 3.280048370361328,
+    "delta_cross_entropy": -0.025122642517089844,
+    "perplexity": 26.414029339765733
+  },
+  "lm_head": {
+    "sqnr_db": 19.735580682754517,
+    "kl_teacher_to_student": 493957184.0,
+    "kl_student_to_teacher": 101.06039428710938,
+    "delta_cross_entropy": 0.1787242889404297,
+    "perplexity": 31.83570973905575
+  }
+}

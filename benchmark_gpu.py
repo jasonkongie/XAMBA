@@ -1,16 +1,15 @@
 """
-benchmark.py  —  CPU Pipeline
+benchmark_gpu.py  —  GPU Pipeline
 
-Benchmarks all quantized models on CPU using OpenVINO benchmark_app.
-Scans ov_models/ for registered model files (baseline + mixed + uniform),
-excluding GPU-specific models (_gpu_point*).
+Benchmarks GPU-compatible models (INT8/FP16) using OpenVINO benchmark_app -d GPU.
+Scans for: baseline + gpu_point{01-10} + uniform_int8.
 
 Output:
-    log/benchmark_log/{model_name}_CPU_latency.txt   — raw benchmark_app output
-    log/benchmark_log/latency_throughput_report.csv   — summary CSV
+    log/benchmark_log/{model_name}_GPU_latency.txt   — raw benchmark_app output
+    log/benchmark_log/latency_throughput_gpu_report.csv — summary CSV
 
 Usage:
-    python benchmark.py
+    python benchmark_gpu.py
 """
 
 import os
@@ -27,38 +26,48 @@ MODEL_PREFIXES = [
 
 OV_MODELS_DIR  = "ov_models"
 LOG_DIR        = "log/benchmark_log"
-DEVICE         = "CPU"
+DEVICE         = "GPU"
 HINT           = "latency"
-DURATION       = 30   # seconds per benchmark run
+DURATION       = 30
 
-# Regex for parsing benchmark_app output
 LATENCY_RE    = re.compile(r"\[ INFO \]\s+Average:\s+([\d\.]+)\s+ms")
 THROUGHPUT_RE = re.compile(r"\[ INFO \]\s+Throughput:\s+([\d\.]+)\s+FPS")
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def find_cpu_models(models_dir, prefixes):
+def find_gpu_models(models_dir, prefixes):
     """
-    Find all .xml files in models_dir that belong to registered models.
-    Excludes GPU-specific files (*_gpu_point*).
-    Returns sorted list of (xml_filename, model_path).
+    Find GPU-compatible .xml files:
+      - {prefix}.xml              (baseline)
+      - {prefix}_gpu_point*.xml   (mixed INT8/FP16)
+      - {prefix}_uniform_int8.xml (uniform INT8)
     """
     results = []
     for f in sorted(os.listdir(models_dir)):
         if not f.endswith(".xml"):
             continue
-        # Must start with a registered model prefix
         if not any(f.startswith(p) for p in prefixes):
             continue
-        # Exclude GPU-specific models
-        if "_gpu_point" in f:
-            continue
-        results.append((f, os.path.join(models_dir, f)))
+
+        stem = f[:-4]   # strip .xml
+        for prefix in prefixes:
+            if not f.startswith(prefix):
+                continue
+            suffix = stem[len(prefix):]   # everything after model prefix
+
+            # Accept: baseline (empty suffix), _gpu_point*, _uniform_int8
+            if suffix == "":
+                results.append((f, os.path.join(models_dir, f)))
+            elif suffix.startswith("_gpu_point"):
+                results.append((f, os.path.join(models_dir, f)))
+            elif suffix == "_uniform_int8":
+                results.append((f, os.path.join(models_dir, f)))
+            break  # matched a prefix, no need to check others
+
     return results
 
 
 def parse_log(log_path):
-    """Extract average latency (ms) and throughput (FPS) from benchmark log."""
     latency = throughput = None
     try:
         with open(log_path) as f:
@@ -82,10 +91,10 @@ def parse_log(log_path):
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    models = find_cpu_models(OV_MODELS_DIR, MODEL_PREFIXES)
+    models = find_gpu_models(OV_MODELS_DIR, MODEL_PREFIXES)
     if not models:
-        print(f"[!] No models found in {OV_MODELS_DIR}/ matching prefixes: {MODEL_PREFIXES}")
-        print("    Run convert.py, quantize_uniform.py, and quantize_mixed.py first.")
+        print(f"[!] No GPU models found in {OV_MODELS_DIR}/")
+        print("    Run convert.py, quantize_uniform.py, and quantize_mixed_gpu.py first.")
         return
 
     print(f"Found {len(models)} models to benchmark on {DEVICE}:")
@@ -95,7 +104,7 @@ def main():
 
     # ── Run benchmarks ───────────────────────────────────────────────────
     for fname, model_path in models:
-        blob_name = fname[:-4]   # strip .xml
+        blob_name = fname[:-4]
         log_path  = os.path.join(LOG_DIR, f"{blob_name}_{DEVICE}_{HINT}.txt")
 
         cmd = (
@@ -115,7 +124,6 @@ def main():
         with open(log_path, "w") as log_file:
             subprocess.run(cmd, shell=True, stdout=log_file, stderr=subprocess.STDOUT)
 
-        # Quick peek at results
         lat, fps = parse_log(log_path)
         if lat and fps:
             print(f"  → Latency: {lat:.2f} ms  |  Throughput: {fps:.2f} FPS")
@@ -123,8 +131,8 @@ def main():
             print(f"  → [!] Could not parse results from {log_path}")
         print()
 
-    # ── Extract summary CSV ──────────────────────────────────────────────
-    csv_path = os.path.join(LOG_DIR, "latency_throughput_report.csv")
+    # ── Summary CSV ──────────────────────────────────────────────────────
+    csv_path = os.path.join(LOG_DIR, "latency_throughput_gpu_report.csv")
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["filename", "device", "latency_ms", "throughput_fps"])
@@ -134,14 +142,13 @@ def main():
             log_path  = os.path.join(LOG_DIR, f"{blob_name}_{DEVICE}_{HINT}.txt")
             lat, fps  = parse_log(log_path)
             writer.writerow([
-                blob_name,
-                DEVICE,
+                blob_name, DEVICE,
                 f"{lat:.2f}" if lat else "N/A",
                 f"{fps:.2f}" if fps else "N/A",
             ])
 
     print(f"{'='*60}")
-    print(f"  Summary saved: {csv_path}")
+    print(f"  GPU Summary saved: {csv_path}")
     print(f"  Total models benchmarked: {len(models)}")
     print(f"{'='*60}")
 
