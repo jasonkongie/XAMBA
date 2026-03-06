@@ -37,9 +37,10 @@ MODEL_REGISTRY = {
     },
 }
 
-SEQ_LEN     = 2048
-N_POINTS    = 10
-OUTPUT_JSON = "perplexity_results_gpu.json"
+SEQ_LEN      = 2048
+N_POINTS     = 10
+MAX_WINDOWS  = 3       # limit evaluation to this many windows for quick runs (set None for full)
+OUTPUT_JSON  = "perplexity_results_gpu.json"
 
 # ── Sensitivity (8-bit only) ─────────────────────────────────────────────────
 
@@ -84,6 +85,9 @@ def compute_perplexity(model, tokenizer, text, seq_len=2048):
     N         = input_ids.shape[1]
     n_windows = max(1, (N - 1) // seq_len)
     pad_id    = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else -100
+
+    if MAX_WINDOWS is not None:
+        n_windows = min(n_windows, MAX_WINDOWS)
 
     nlls = []
     for i in tqdm(range(n_windows), desc="    eval", leave=False):
