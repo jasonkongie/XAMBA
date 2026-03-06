@@ -30,7 +30,9 @@ OV_MODELS_DIR  = "ov_models"
 LOG_DIR        = "log/benchmark_log"
 DEVICE         = "CPU"
 HINT           = "latency"
-DURATION       = 30   # seconds per benchmark run
+DURATION       = 30    # seconds per benchmark run
+N_ITER         = 100   # minimum iterations (run until BOTH -t and -niter are satisfied)
+FORCE_RERUN    = True  # set False to skip already-completed models (resumable mode)
 
 # Regex for parsing benchmark_app output
 LATENCY_RE    = re.compile(r"\[ INFO \]\s+Average:\s+([\d\.]+)\s+ms")
@@ -106,11 +108,12 @@ def main():
         blob_name = fname[:-4]   # strip .xml
         log_path  = os.path.join(LOG_DIR, f"{blob_name}_{DEVICE}_{HINT}.txt")
 
-        # Skip if already benchmarked successfully (resumable)
-        lat, fps = parse_log(log_path)
-        if lat and fps:
-            print(f"  [SKIP] {blob_name} — already done ({lat:.2f} ms, {fps:.2f} FPS)")
-            continue
+        # Skip if already benchmarked successfully (only in resumable mode)
+        if not FORCE_RERUN:
+            lat, fps = parse_log(log_path)
+            if lat and fps:
+                print(f"  [SKIP] {blob_name} — already done ({lat:.2f} ms, {fps:.2f} FPS)")
+                continue
 
         cmd = (
             f"{benchmark_app} "
@@ -118,6 +121,7 @@ def main():
             f"-d {DEVICE} "
             f"-hint {HINT} "
             f"-t {DURATION} "
+            f"-niter {N_ITER} "
             f"--inference_only TRUE"
         )
 
