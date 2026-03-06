@@ -16,6 +16,7 @@ Usage:
 import os
 import re
 import csv
+import shutil
 import subprocess
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -82,6 +83,13 @@ def parse_log(log_path):
 def main():
     os.makedirs(LOG_DIR, exist_ok=True)
 
+    # Locate benchmark_app (handles conda envs where subprocess has a different PATH)
+    benchmark_app = shutil.which("benchmark_app")
+    if benchmark_app is None:
+        print("[!] benchmark_app not found on PATH. Activate your OpenVINO env first.")
+        return
+    print(f"  benchmark_app: {benchmark_app}\n")
+
     models = find_cpu_models(OV_MODELS_DIR, MODEL_PREFIXES)
     if not models:
         print(f"[!] No models found in {OV_MODELS_DIR}/ matching prefixes: {MODEL_PREFIXES}")
@@ -98,8 +106,14 @@ def main():
         blob_name = fname[:-4]   # strip .xml
         log_path  = os.path.join(LOG_DIR, f"{blob_name}_{DEVICE}_{HINT}.txt")
 
+        # Skip if already benchmarked successfully (resumable)
+        lat, fps = parse_log(log_path)
+        if lat and fps:
+            print(f"  [SKIP] {blob_name} — already done ({lat:.2f} ms, {fps:.2f} FPS)")
+            continue
+
         cmd = (
-            f"benchmark_app "
+            f"{benchmark_app} "
             f"-m {model_path} "
             f"-d {DEVICE} "
             f"-hint {HINT} "
