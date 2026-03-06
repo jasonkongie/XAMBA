@@ -57,9 +57,7 @@ def find_gpu_models(models_dir, prefixes):
 
             # Accept: _gpu_point*, _uniform_int8 only
             # (baseline FP32 excluded — too large for GPU, compile takes 30+ min)
-            elif suffix.startswith("_gpu_point"):
-                results.append((f, os.path.join(models_dir, f)))
-            elif suffix == "_uniform_int8":
+            if suffix.startswith("_gpu_point") or suffix == "_uniform_int8":
                 results.append((f, os.path.join(models_dir, f)))
             break  # matched a prefix, no need to check others
 
