@@ -29,6 +29,8 @@ from quant_utils import quantize_weight_per_channel_absmax
 MODEL_REGISTRY = {
     "mamba2_b_1_t_4": {
         "hf_id": "yuji96/mamba2-130m-hf",
+        # mamba2 shares the GPTNeoX tokenizer with mamba-130m-hf
+        "tokenizer_id": "state-spaces/mamba-130m-hf",
         # No 8-bit sensitivity file yet; 4-bit KL values used as ranking proxy
         "sensitivity_8bit": "sensitivity_results_mamba2-130m_4bits.json",
     },
@@ -121,8 +123,9 @@ def main():
         print(f"  Model: {model_name}  (GPU pipeline — INT8/FP16)")
         print(f"{'='*60}")
 
-        hf_id     = cfg["hf_id"]
-        tokenizer = AutoTokenizer.from_pretrained(hf_id)
+        hf_id        = cfg["hf_id"]
+        tokenizer_id = cfg.get("tokenizer_id", hf_id)
+        tokenizer    = AutoTokenizer.from_pretrained(tokenizer_id)
 
         sensitivity = load_sensitivity_8bit(cfg["sensitivity_8bit"])
         all_layer_names = [name for name, _ in sensitivity]
