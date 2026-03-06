@@ -36,9 +36,9 @@ MODEL_REGISTRY = {
     },
 }
 
-SEQ_LEN      = 2048
+SEQ_LEN      = 256     # must match mamba2 chunk_size (256); 20×256=5120 tokens total
 N_POINTS     = 10
-MAX_WINDOWS  = 20      # 20 windows (~40k tokens)
+MAX_WINDOWS  = 20
 OUTPUT_JSON  = "perplexity_results_gpu.json"
 
 # ── Sensitivity (8-bit only) ─────────────────────────────────────────────────
