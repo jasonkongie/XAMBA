@@ -43,7 +43,7 @@ MODEL_REGISTRY = {
 
 SEQ_LEN      = 2048
 N_POINTS     = 10
-MAX_WINDOWS  = 3       # limit evaluation to this many windows for quick runs (set None for full)
+MAX_WINDOWS  = 20      # 20 windows (~40k tokens)
 OUTPUT_JSON  = "perplexity_results.json"
 
 # ── Sensitivity (same as quantize_mixed.py) ──────────────────────────────────

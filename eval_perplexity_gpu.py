@@ -27,19 +27,16 @@ from quant_utils import quantize_weight_per_channel_absmax
 # ── Model Registry ───────────────────────────────────────────────────────────
 
 MODEL_REGISTRY = {
-    "mamba-130m-hf": {
-        "hf_id": "state-spaces/mamba-130m-hf",
-        "sensitivity_8bit": "mamba130m_sensitivity_results_8bits.json",
-    },
-    "mamba-1.4b-hf": {
-        "hf_id": "state-spaces/mamba-1.4b-hf",
-        "sensitivity_8bit": "mamba1_4b_sensitivity_results_8bits.json",
+    "mamba2_b_1_t_4": {
+        "hf_id": "yuji96/mamba2-130m-hf",
+        # No 8-bit sensitivity file yet; 4-bit KL values used as ranking proxy
+        "sensitivity_8bit": "sensitivity_results_mamba2-130m_4bits.json",
     },
 }
 
 SEQ_LEN      = 2048
 N_POINTS     = 10
-MAX_WINDOWS  = 3       # limit evaluation to this many windows for quick runs (set None for full)
+MAX_WINDOWS  = 20      # 20 windows (~40k tokens)
 OUTPUT_JSON  = "perplexity_results_gpu.json"
 
 # ── Sensitivity (8-bit only) ─────────────────────────────────────────────────
