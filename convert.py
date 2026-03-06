@@ -44,17 +44,25 @@ for model_hf in MODELS:
         )
     print(f"ONNX saved: {onnx_path}")
 
-    ### Simplify ONNX (removes Identity ops and cleans up the graph)
-    print("Simplifying ONNX model...")
-    model_onnx = onnx.load(onnx_path)
-    model_simplified, check = simplify(model_onnx)
-    assert check, "ONNX simplification failed validation"
+    ### Simplify ONNX (removes Identity ops — optional, may fail on large models)
     simplified_path = onnx_path.replace(".onnx", "_simplified.onnx")
-    onnx.save(model_simplified, simplified_path)
-    print(f"Simplified ONNX saved: {simplified_path}")
+    onnx_for_ov = onnx_path   # default: use original if simplification fails
+    try:
+        print("Simplifying ONNX model...")
+        model_onnx = onnx.load(onnx_path)
+        model_simplified, check = simplify(model_onnx)
+        if check:
+            onnx.save(model_simplified, simplified_path)
+            onnx_for_ov = simplified_path
+            print(f"Simplified ONNX saved: {simplified_path}")
+        else:
+            print("Warning: onnxsim validation failed — using original ONNX")
+    except Exception as e:
+        print(f"Warning: onnxsim skipped ({e.__class__.__name__}: {e})")
+        print("  → Falling back to original ONNX (fine for CPU)")
 
-    ### Convert simplified ONNX → OpenVINO IR
-    ov_model    = ov.convert_model(input_model=simplified_path)
+    ### Convert ONNX → OpenVINO IR
+    ov_model    = ov.convert_model(input_model=onnx_for_ov)
     output_path = f"ov_models/{model_name}.xml"
 
     # compress_to_fp16=False: keeps weights as FP32 so NNCF compress_weights
