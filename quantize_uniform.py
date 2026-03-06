@@ -26,10 +26,8 @@ MODEL_REGISTRY = {
         "sensitivity_4bit": "mamba130m_sensitivity_results_4bits.json",
         "sensitivity_8bit": "mamba130m_sensitivity_results_8bits.json",
     },
-    "mamba-1.4b-hf": {
-        "hf_id": "state-spaces/mamba-1.4b-hf",
-        "sensitivity_4bit": "mamba1_4b_sensitivity_results_4bits.json",
-        "sensitivity_8bit": "mamba1_4b_sensitivity_results_8bits.json",
+    "mamba2_b_1_t_4": {
+        "hf_id": "yuji96/mamba2-130m-hf",
     },
 }
 

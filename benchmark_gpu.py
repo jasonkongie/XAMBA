@@ -22,7 +22,7 @@ import subprocess
 
 MODEL_PREFIXES = [
     "mamba-130m-hf",
-    "mamba-1.4b-hf",
+    "mamba2_b_1_t_4",
 ]
 
 OV_MODELS_DIR  = "ov_models"
@@ -56,9 +56,10 @@ def find_gpu_models(models_dir, prefixes):
                 continue
             suffix = stem[len(prefix):]   # everything after model prefix
 
-            # Accept: _gpu_point*, _uniform_int8 only
-            # (baseline FP32 excluded — too large for GPU, compile takes 30+ min)
-            if suffix.startswith("_gpu_point") or suffix == "_uniform_int8":
+            # Accept: baseline, _gpu_point*, _uniform_int8
+            # (mamba-1.4b baseline was excluded — 5.3GB, 30+ min compile;
+            #  mamba-130m and mamba2-130m baselines are fine)
+            if suffix == "" or suffix.startswith("_gpu_point") or suffix == "_uniform_int8":
                 results.append((f, os.path.join(models_dir, f)))
             break  # matched a prefix, no need to check others
 
