@@ -46,6 +46,11 @@ N_POINTS     = 10
 MAX_WINDOWS  = 20      # 20 windows (~40k tokens)
 OUTPUT_JSON  = "perplexity_results.json"
 
+# ── Sensitivity metric ────────────────────────────────────────────────────────
+# "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
+# "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
+SENSITIVITY_METRIC = "sqnr_db"
+
 # ── Sensitivity (same as quantize_mixed.py) ──────────────────────────────────
 
 def build_sensitivity_list(path4, path8):
@@ -54,10 +59,13 @@ def build_sensitivity_list(path4, path8):
     sens8 = json.load(open(path8))
     merged = []
     for layer, stats in sens4.items():
-        merged.append((layer, 4, stats["kl_student_to_teacher"]))
+        merged.append((layer, 4, stats[SENSITIVITY_METRIC]))
     for layer, stats in sens8.items():
-        merged.append((layer, 8, stats["kl_student_to_teacher"]))
-    return sorted(merged, key=lambda t: t[2])
+        merged.append((layer, 8, stats[SENSITIVITY_METRIC]))
+    # SQNR: high = less sensitive → sort DESC (index 0 = safest to quantize)
+    # KL:   low  = less sensitive → sort ASC  (index 0 = safest to quantize)
+    reverse = (SENSITIVITY_METRIC == "sqnr_db")
+    return sorted(merged, key=lambda t: t[2], reverse=reverse)
 
 
 def compute_cutoff_indices(n_entries, n_points=10):

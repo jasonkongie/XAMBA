@@ -29,24 +29,41 @@ MODEL_REGISTRY = {
     "mamba-130m-hf": {
         "hf_id": "state-spaces/mamba-130m-hf",
         "sensitivity_8bit": "mamba130m_sensitivity_results_8bits.json",
+        # Standard Mamba v1 — no XAMBA MatMul issue — all 10 points compile fine
     },
     "mamba2_b_1_t_4": {
         "hf_id": "yuji96/mamba2-130m-hf",
         "sensitivity_8bit": "sensitivity_results_mamba2-130m_8bits_XAMBA.json",
+        # XAMBA CumBA MatMul fails GPU compilation at high quantization levels
+        # (point09/10 always crash even though MatMul is excluded from NNCF).
+        # Root cause: heavy surrounding INT8 nodes change oneDNN's primitive
+        # descriptor resolution for the MatMul, which has an unusual [B,24,T,T]
+        # shape that the GPU backend cannot handle in that mixed-type context.
+        # Cap at 8 points — the first 8 cutoffs reliably compile on GPU.
+        "n_points": 8,
     },
 }
 
-N_POINTS   = 10
+N_POINTS   = 10   # default; override per-model with "n_points" in registry
 OUTPUT_DIR = "ov_models"
+
+# ── Sensitivity metric ────────────────────────────────────────────────────────
+# "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
+# "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
+SENSITIVITY_METRIC = "sqnr_db"
 
 # ── Sensitivity (8-bit only) ─────────────────────────────────────────────────
 
 def load_sensitivity_8bit(path):
-    """Load 8-bit KL sensitivity, sorted ascending by kl_student_to_teacher."""
+    """Load 8-bit sensitivity, sorted so index 0 = least sensitive = quantize first.
+    SQNR: sort DESC (high SQNR = less noise = safer to quantize).
+    KL:   sort ASC  (low KL   = less divergence = safer to quantize).
+    """
     with open(path) as f:
         data = json.load(f)
-    layers = [(name, stats["kl_student_to_teacher"]) for name, stats in data.items()]
-    layers.sort(key=lambda x: x[1])
+    layers = [(name, stats[SENSITIVITY_METRIC]) for name, stats in data.items()]
+    reverse = (SENSITIVITY_METRIC == "sqnr_db")
+    layers.sort(key=lambda x: x[1], reverse=reverse)
     return layers
 
 
@@ -127,8 +144,9 @@ def main():
         all_layer_names = [name for name, _ in sensitivity]
         print(f"  Sensitivity list: {len(sensitivity)} layers")
 
-        indices = compute_cutoff_indices(len(sensitivity), N_POINTS)
-        print(f"  Cutoff indices: {indices}")
+        n_pts = cfg.get("n_points", N_POINTS)
+        indices = compute_cutoff_indices(len(sensitivity), n_pts)
+        print(f"  Cutoff indices ({n_pts} points): {indices}")
 
         for point_idx, cutoff in enumerate(indices):
             point_name = f"gpu_point{point_idx + 1:02d}"

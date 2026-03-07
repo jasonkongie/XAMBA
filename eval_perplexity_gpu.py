@@ -40,13 +40,23 @@ N_POINTS     = 10
 MAX_WINDOWS  = 20
 OUTPUT_JSON  = "perplexity_results_gpu.json"
 
+# ── Sensitivity metric ────────────────────────────────────────────────────────
+# "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
+# "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
+SENSITIVITY_METRIC = "sqnr_db"
+
 # ── Sensitivity (8-bit only) ─────────────────────────────────────────────────
 
 def load_sensitivity_8bit(path):
+    """Load 8-bit sensitivity, sorted so index 0 = least sensitive = quantize first.
+    SQNR: sort DESC (high SQNR = less noise = safer to quantize).
+    KL:   sort ASC  (low KL   = less divergence = safer to quantize).
+    """
     with open(path) as f:
         data = json.load(f)
-    layers = [(name, stats["kl_student_to_teacher"]) for name, stats in data.items()]
-    layers.sort(key=lambda x: x[1])
+    layers = [(name, stats[SENSITIVITY_METRIC]) for name, stats in data.items()]
+    reverse = (SENSITIVITY_METRIC == "sqnr_db")
+    layers.sort(key=lambda x: x[1], reverse=reverse)
     return layers
 
 

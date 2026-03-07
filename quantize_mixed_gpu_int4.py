@@ -44,6 +44,11 @@ OUTPUT_DIR = "ov_models"
 # XAMBA CumBA MatMul ops — replaced cumsum, no INT4/INT8 GPU kernel, always FP16
 XAMBA_MATMUL_PATTERN = r".*/mixer/MatMul.*"
 
+# ── Sensitivity metric ────────────────────────────────────────────────────────
+# "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
+# "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
+SENSITIVITY_METRIC = "sqnr_db"
+
 # ── Sensitivity ───────────────────────────────────────────────────────────────
 
 def build_sensitivity_list(path4, path8):
@@ -57,10 +62,13 @@ def build_sensitivity_list(path4, path8):
     sens8 = json.load(open(path8))
     merged = []
     for layer, stats in sens4.items():
-        merged.append((layer, 4, stats["kl_student_to_teacher"]))
+        merged.append((layer, 4, stats[SENSITIVITY_METRIC]))
     for layer, stats in sens8.items():
-        merged.append((layer, 8, stats["kl_student_to_teacher"]))
-    return sorted(merged, key=lambda t: t[2])
+        merged.append((layer, 8, stats[SENSITIVITY_METRIC]))
+    # SQNR: high = less sensitive → sort DESC (index 0 = safest to quantize)
+    # KL:   low  = less sensitive → sort ASC  (index 0 = safest to quantize)
+    reverse = (SENSITIVITY_METRIC == "sqnr_db")
+    return sorted(merged, key=lambda t: t[2], reverse=reverse)
 
 
 def compute_cutoff_indices(n_entries, n_points=10):
@@ -161,7 +169,7 @@ def main():
         S = build_sensitivity_list(cfg["sensitivity_4bit"], cfg["sensitivity_8bit"])
         all_unique_layers = list(set(l for l, _, _ in S))
         print(f"  Sensitivity list: {len(S)} entries  |  {len(all_unique_layers)} unique layers")
-        print(f"  Protected (most sensitive): '{S[-1][0]}'  KL={S[-1][2]:.4f}")
+        print(f"  Protected (most sensitive): '{S[-1][0]}'  {SENSITIVITY_METRIC}={S[-1][2]:.4f}")
 
         indices = compute_cutoff_indices(len(S), N_POINTS)
         print(f"  Cutoff indices (safe_max={len(S)-1}): {indices}")

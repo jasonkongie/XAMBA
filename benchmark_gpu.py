@@ -20,17 +20,22 @@ import subprocess
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-MODEL_PREFIXES = [
-    "mamba-130m-hf",
-    "mamba2_b_1_t_4",
-]
+# Maximum GPU Pareto points generated per model.
+# mamba2_b_1_t_4 caps at 8 (point09/10 crash: XAMBA MatMul fails GPU compile
+# at high INT8 density even when excluded from NNCF quantization).
+MODEL_GPU_POINTS = {
+    "mamba-130m-hf":   10,
+    "mamba2_b_1_t_4":  8,
+}
+
+MODEL_PREFIXES = list(MODEL_GPU_POINTS.keys())
 
 OV_MODELS_DIR  = "ov_models"
 LOG_DIR        = "log/benchmark_log"
 DEVICE         = "GPU"
 HINT           = "latency"
 DURATION       = 60    # seconds per benchmark run
-N_ITER         = 300   # minimum iterations (run until BOTH -t and -niter are satisfied)
+N_ITER         = 50    # minimum iterations (run until BOTH -t and -niter are satisfied)
 FORCE_RERUN    = True  # set False to skip already-completed models (resumable mode)
 
 LATENCY_RE    = re.compile(r"\[ INFO \]\s+Average:\s+([\d\.]+)\s+ms")
@@ -58,11 +63,21 @@ def find_gpu_models(models_dir, prefixes):
                 continue
             suffix = stem[len(prefix):]   # everything after model prefix
 
-            # Accept: baseline, _gpu_point*, _uniform_int8
-            # (mamba-1.4b baseline was excluded — 5.3GB, 30+ min compile;
-            #  mamba-130m and mamba2-130m baselines are fine)
-            if suffix == "" or suffix.startswith("_gpu_point") or suffix == "_uniform_int8":
+            # Accept: baseline, _gpu_point{01..N}, _uniform_int8
+            # mamba2_b_1_t_4 caps at 8 GPU points (09/10 always fail GPU compile)
+            if suffix == "" or suffix == "_uniform_int8":
                 results.append((f, os.path.join(models_dir, f)))
+            elif suffix.startswith("_gpu_point"):
+                # Parse point index and reject points beyond the model's max
+                try:
+                    pt_num = int(suffix.replace("_gpu_point", ""))
+                    max_pts = MODEL_GPU_POINTS.get(prefix, 10)
+                    if pt_num <= max_pts:
+                        results.append((f, os.path.join(models_dir, f)))
+                    else:
+                        pass   # silently skip — this model never generates this point
+                except ValueError:
+                    results.append((f, os.path.join(models_dir, f)))
             break  # matched a prefix, no need to check others
 
     return results

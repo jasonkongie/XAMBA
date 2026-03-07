@@ -31,7 +31,7 @@ LOG_DIR        = "log/benchmark_log"
 DEVICE         = "CPU"
 HINT           = "latency"
 DURATION       = 60    # seconds per benchmark run
-N_ITER         = 300   # minimum iterations (run until BOTH -t and -niter are satisfied)
+N_ITER         = 50    # minimum iterations (run until BOTH -t and -niter are satisfied)
 FORCE_RERUN    = True  # set False to skip already-completed models (resumable mode)
 
 # Regex for parsing benchmark_app output
