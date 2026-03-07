@@ -50,6 +50,18 @@ OUTPUT_JSON        = f"perplexity_results_gpu_{METRIC_TAG}.json"
 # Exclude Conv1d (SSM conv1d) — matches OV pipeline's IgnoredScope(types=["Convolution"])
 LINEAR_ONLY_SCOPE = nncf.IgnoredScope(types=["Conv1d"], validate=False)
 
+# ── Per-layer quantization ────────────────────────────────────────────────────
+
+def quantize_weight(w: torch.Tensor, n_bits: int) -> torch.Tensor:
+    """
+    Per-output-channel symmetric absmax quantization.
+    Matches NNCF compress_weights INT8_SYM with group_size=-1.
+    Used for mixed-precision points where a per-layer approach is needed.
+    """
+    q_max  = 2 ** (n_bits - 1) - 1
+    scales = w.abs().max(dim=-1, keepdim=True).values.clamp(min=1e-5)
+    return (w / scales).round().clamp(-q_max, q_max) * scales
+
 # ── Sensitivity helpers ───────────────────────────────────────────────────────
 
 def load_sensitivity_8bit(path):
@@ -139,16 +151,9 @@ def main():
             print(f"\n  [{label}] cutoff {cutoff}/{len(sensitivity)}  "
                   f"INT8:{len(int8_names)}  FP16:{len(fp16_names)}")
             model = load_fresh_model(hf_id)
-            model = nncf.compress_weights(
-                model,
-                mode          = nncf.CompressWeightsMode.INT8_SYM,
-                group_size    = -1,
-                ignored_scope = nncf.IgnoredScope(
-                    types    = ["Conv1d"],
-                    names    = fp16_names,
-                    validate = False,
-                ),
-            )
+            for name, module in model.named_modules():
+                if name in int8_names and hasattr(module, "weight"):
+                    module.weight.data = quantize_weight(module.weight.data, n_bits=8)
             ppl = compute_perplexity(model, tokenizer, test_text, seq_len)
             results[label] = round(ppl, 3)
             print(f"    → PPL = {ppl:.3f}")

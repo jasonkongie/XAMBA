@@ -54,6 +54,19 @@ OUTPUT_JSON        = f"perplexity_results_{METRIC_TAG}.json"
 # Exclude Conv1d (SSM conv1d) — matches OV pipeline's IgnoredScope(types=["Convolution"])
 LINEAR_ONLY_SCOPE = nncf.IgnoredScope(types=["Conv1d"], validate=False)
 
+# ── Per-layer quantization ────────────────────────────────────────────────────
+
+def quantize_weight(w: torch.Tensor, n_bits: int) -> torch.Tensor:
+    """
+    Per-output-channel symmetric absmax quantization.
+    Matches NNCF compress_weights INT4_SYM / INT8_SYM with group_size=-1.
+    Used for mixed-precision points where two NNCF passes on the same
+    PyTorch model would fail (NNCF wraps layers after the first call).
+    """
+    q_max  = 2 ** (n_bits - 1) - 1
+    scales = w.abs().max(dim=-1, keepdim=True).values.clamp(min=1e-5)
+    return (w / scales).round().clamp(-q_max, q_max) * scales
+
 # ── Sensitivity helpers ───────────────────────────────────────────────────────
 
 def build_sensitivity_list(path4, path8):
@@ -81,40 +94,16 @@ def get_layer_assignments(S, cutoff_idx):
 
 def apply_mixed_precision(model, assignment):
     """
-    Two-pass NNCF compress_weights matching quantize_mixed.py exactly:
-      Pass 1 — INT8_SYM on INT8-assigned layers  (INT4 layers in ignored scope)
-      Pass 2 — INT4_SYM on INT4-assigned layers  (INT8 layers in ignored scope)
-    Conv1d layers are excluded in both passes via types=["Conv1d"].
-    validate=False so missing layer names degrade gracefully.
+    Per-layer in-place quantization for mixed-precision points.
+    Uses the same per-output-channel symmetric absmax algorithm as
+    NNCF compress_weights INT4_SYM / INT8_SYM with group_size=-1.
+    (Two NNCF passes on the same PyTorch model fail because NNCF wraps
+    linear layers after the first call, breaking the second call.)
+    Conv1d layers are naturally skipped — they won't appear in assignment.
     """
-    int4_layers = [l for l, b in assignment.items() if b == 4]
-    int8_layers = [l for l, b in assignment.items() if b == 8]
-
-    if int8_layers:
-        model = nncf.compress_weights(
-            model,
-            mode          = nncf.CompressWeightsMode.INT8_SYM,
-            group_size    = -1,
-            ignored_scope = nncf.IgnoredScope(
-                types    = ["Conv1d"],
-                names    = int4_layers,
-                validate = False,
-            ),
-        )
-
-    if int4_layers:
-        model = nncf.compress_weights(
-            model,
-            mode          = nncf.CompressWeightsMode.INT4_SYM,
-            ratio         = 1.0,
-            group_size    = -1,
-            ignored_scope = nncf.IgnoredScope(
-                types    = ["Conv1d"],
-                names    = int8_layers,
-                validate = False,
-            ),
-        )
-
+    for name, module in model.named_modules():
+        if name in assignment and hasattr(module, "weight"):
+            module.weight.data = quantize_weight(module.weight.data, n_bits=assignment[name])
     return model
 
 # ── Model loading ─────────────────────────────────────────────────────────────
