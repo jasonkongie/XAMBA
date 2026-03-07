@@ -1,17 +1,17 @@
 """
 eval_perplexity.py  —  CPU Pipeline
 
-Evaluates WikiText-2 perplexity for each base model at every quantization point:
-  - baseline (FP32)
-  - point01..point10 (mixed INT4/INT8/FP16 from merged sensitivity)
-  - uniform_int4  (all layers INT4)
-  - uniform_int8  (all layers INT8)
+Evaluates WikiText-2 perplexity by loading the actual OpenVINO IR models
+(.xml / .bin) produced by quantize_mixed.py and quantize_uniform.py.
 
-Uses fake-quantization (quantize_weight_per_channel_absmax) on the PyTorch model,
-matching the algorithm from pareto.py exactly.
+Configs evaluated per model:
+  - FP16 baseline   : {model}.xml
+  - mixed-precision : {model}_{METRIC_TAG}_point01.xml  ..  point10.xml
+  - uniform INT8    : {model}_uniform_int8.xml
+  - uniform INT4    : {model}_uniform_int4.xml
 
 Output:
-    perplexity_results.json   — {model_name: {point: ppl}}
+    perplexity_results_{METRIC_TAG}.json  —  {model_name: {point: ppl}}
 
 Usage:
     python eval_perplexity.py
@@ -21,107 +21,43 @@ import os
 import json
 import torch
 import torch.nn.functional as F
+import openvino as ov
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
+from transformers import AutoTokenizer
 from tqdm import tqdm
-from quant_utils import quantize_weight_per_channel_absmax
 
 # ── Model Registry ───────────────────────────────────────────────────────────
 
 MODEL_REGISTRY = {
     "mamba-130m-hf": {
         "hf_id": "state-spaces/mamba-130m-hf",
-        "sensitivity_4bit": "mamba130m_sensitivity_results_4bits.json",
-        "sensitivity_8bit": "mamba130m_sensitivity_results_8bits.json",
     },
     "mamba-1.4b-hf": {
         "hf_id": "state-spaces/mamba-1.4b-hf",
-        "sensitivity_4bit": "mamba1_4b_sensitivity_results_4bits.json",
-        "sensitivity_8bit": "mamba1_4b_sensitivity_results_8bits.json",
     },
 }
 
-SEQ_LEN      = 2048
-N_POINTS     = 10
-MAX_WINDOWS  = 20      # 20 windows (~40k tokens)
+OV_DIR      = "ov_models"
+DEVICE      = "CPU"
+SEQ_LEN     = 2048
+MAX_WINDOWS = 20
+N_POINTS    = 10
 
 # ── Sensitivity metric ────────────────────────────────────────────────────────
-# "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
-# "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
-SENSITIVITY_METRIC = "sqnr_db"
-METRIC_TAG         = "sqnr" if SENSITIVITY_METRIC == "sqnr_db" else "kl"
-
-OUTPUT_JSON  = f"perplexity_results_{METRIC_TAG}.json"
-# e.g. perplexity_results_sqnr.json  or  perplexity_results_kl.json
-
-# ── Sensitivity (same as quantize_mixed.py) ──────────────────────────────────
-
-def build_sensitivity_list(path4, path8):
-    """Merge 4-bit and 8-bit KL files into [(layer, bit, kl), ...] sorted ASC."""
-    sens4 = json.load(open(path4))
-    sens8 = json.load(open(path8))
-    merged = []
-    for layer, stats in sens4.items():
-        merged.append((layer, 4, stats[SENSITIVITY_METRIC]))
-    for layer, stats in sens8.items():
-        merged.append((layer, 8, stats[SENSITIVITY_METRIC]))
-    # SQNR: high = less sensitive → sort DESC (index 0 = safest to quantize)
-    # KL:   low  = less sensitive → sort ASC  (index 0 = safest to quantize)
-    reverse = (SENSITIVITY_METRIC == "sqnr_db")
-    return sorted(merged, key=lambda t: t[2], reverse=reverse)
-
-
-def compute_cutoff_indices(n_entries, n_points=10):
-    # Divide into n_points equal segments, exclude the last entry (most sensitive)
-    segment_size = (n_entries - 1) // n_points
-    return [segment_size * i for i in range(1, n_points + 1)]
-
-
-def get_layer_assignments(S, cutoff_idx):
-    """Last-wins: 8-bit entries come first, 4-bit overwrites later."""
-    assignment = {}
-    for layer, bit, kl in S[:cutoff_idx]:
-        assignment[layer] = bit
-    return assignment
-
-# ── Quantization ─────────────────────────────────────────────────────────────
-
-def quantize_single_layer(model, layer_name, n_bits):
-    """In-place fake-quantization of a single layer's weight (from pareto.py)."""
-    for name, mod in model.named_modules():
-        if name == layer_name and hasattr(mod, "weight"):
-            mod.weight.data = quantize_weight_per_channel_absmax(
-                mod.weight.data, n_bits=n_bits
-            )
-            return
-    # Don't raise — some layers (e.g., lm_head in Mamba v1) might use
-    # a different module structure. Just warn.
-    print(f"    [warn] Layer not found: {layer_name}")
-
-# ── Model Loading ────────────────────────────────────────────────────────────
-
-def load_fresh_model(hf_id):
-    """Load MambaForCausalLM with use_cache=False."""
-    config = AutoConfig.from_pretrained(hf_id)
-    config.use_cache = False
-    model = AutoModelForCausalLM.from_pretrained(
-        hf_id, config=config, trust_remote_code=True
-    )
-    return model.eval()
+# Must match the METRIC_TAG used when running quantize_mixed.py
+SENSITIVITY_METRIC = "kl_student_to_teacher"
+METRIC_TAG         = "kl" if SENSITIVITY_METRIC == "kl_student_to_teacher" else "sqnr"
+OUTPUT_JSON        = f"perplexity_results_{METRIC_TAG}.json"
 
 # ── Perplexity ───────────────────────────────────────────────────────────────
 
-@torch.no_grad()
-def compute_perplexity(model, tokenizer, text, seq_len=2048):
-    """Non-overlapping windows, cross-entropy loss, exp(mean NLL)."""
+def compute_perplexity(compiled_model, tokenizer, text, seq_len=2048):
+    """Non-overlapping windows over the OV compiled model. No gradients needed."""
     enc       = tokenizer(text, return_tensors="pt", truncation=False)
-    input_ids = enc.input_ids          # [1, N]
+    input_ids = enc.input_ids.numpy()        # OV expects numpy
     N         = input_ids.shape[1]
-    n_windows = max(1, (N - 1) // seq_len)
+    n_windows = min(MAX_WINDOWS, max(1, (N - 1) // seq_len))
     pad_id    = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else -100
-
-    if MAX_WINDOWS is not None:
-        n_windows = min(n_windows, MAX_WINDOWS)
 
     nlls = []
     for i in tqdm(range(n_windows), desc="    eval", leave=False):
@@ -130,11 +66,14 @@ def compute_perplexity(model, tokenizer, text, seq_len=2048):
         chunk = input_ids[:, s:e]
         if chunk.shape[1] < 2:
             continue
-        inp = chunk[:, :-1]
-        tgt = chunk[:, 1:]
 
-        logits = model(input_ids=inp).logits
-        loss   = F.cross_entropy(
+        inp = chunk[:, :-1]
+        tgt = torch.from_numpy(chunk[:, 1:]).long()
+
+        result = compiled_model({"input_ids": inp})
+        logits = torch.from_numpy(result[0])   # result[0] = first output = logits
+
+        loss = F.cross_entropy(
             logits.reshape(-1, logits.shape[-1]),
             tgt.reshape(-1),
             ignore_index=pad_id,
@@ -151,79 +90,58 @@ def main():
     test_text = "\n\n".join(t for t in raw["text"] if t.strip())
     print(f"  {len(test_text):,} characters")
 
+    core        = ov.Core()
     all_results = {}
 
     for model_name, cfg in MODEL_REGISTRY.items():
         print(f"\n{'='*60}")
-        print(f"  Model: {model_name}")
+        print(f"  Model: {model_name}  (device: {DEVICE})")
         print(f"{'='*60}")
 
-        hf_id     = cfg["hf_id"]
-        tokenizer = AutoTokenizer.from_pretrained(hf_id)
+        tokenizer = AutoTokenizer.from_pretrained(cfg["hf_id"])
+        results   = {}
 
-        S = build_sensitivity_list(cfg["sensitivity_4bit"], cfg["sensitivity_8bit"])
-        all_layer_names = list(set(l for l, _, _ in S))
-        indices = compute_cutoff_indices(len(S), N_POINTS)
+        # Build ordered list of (label, xml_path) to evaluate
+        configs = []
 
-        results = {}
+        # FP16 baseline (XAMBA OV export)
+        p = os.path.join(OV_DIR, f"{model_name}.xml")
+        if os.path.exists(p):
+            configs.append(("baseline_fp16", p))
+        else:
+            print(f"  [!] Baseline not found: {p}  — run convert.py first")
 
-        # ── Baseline ─────────────────────────────────────────────────────
-        print("\n  [baseline] FP32 — no quantization")
-        model = load_fresh_model(hf_id)
-        ppl   = compute_perplexity(model, tokenizer, test_text, SEQ_LEN)
-        results["baseline"] = round(ppl, 3)
-        print(f"    → PPL = {ppl:.3f}")
-        del model
+        # Mixed-precision points
+        for i in range(1, N_POINTS + 1):
+            p = os.path.join(OV_DIR, f"{model_name}_{METRIC_TAG}_point{i:02d}.xml")
+            if os.path.exists(p):
+                configs.append((f"{METRIC_TAG}_point{i:02d}", p))
 
-        # ── Mixed-precision points ───────────────────────────────────────
-        for point_idx, cutoff in enumerate(indices):
-            point_name = f"{METRIC_TAG}_point{point_idx + 1:02d}"
-            assignment = get_layer_assignments(S, cutoff)
-            n4 = sum(1 for b in assignment.values() if b == 4)
-            n8 = sum(1 for b in assignment.values() if b == 8)
+        # Uniform endpoints
+        for suffix in ["uniform_int8", "uniform_int4"]:
+            p = os.path.join(OV_DIR, f"{model_name}_{suffix}.xml")
+            if os.path.exists(p):
+                configs.append((suffix, p))
 
-            print(f"\n  [{point_name}] cutoff {cutoff}/{len(S)}  (INT4:{n4}  INT8:{n8})")
-            model = load_fresh_model(hf_id)
-            for layer, bit in assignment.items():
-                quantize_single_layer(model, layer, n_bits=bit)
-            ppl = compute_perplexity(model, tokenizer, test_text, SEQ_LEN)
-            results[point_name] = round(ppl, 3)
+        for label, path in configs:
+            print(f"\n  [{label}]  {os.path.basename(path)}")
+            compiled = core.compile_model(path, DEVICE)
+            ppl      = compute_perplexity(compiled, tokenizer, test_text, SEQ_LEN)
+            results[label] = round(ppl, 3)
             print(f"    → PPL = {ppl:.3f}")
-            del model
-
-        # ── Uniform INT4 ────────────────────────────────────────────────
-        print(f"\n  [uniform_int4] all {len(all_layer_names)} layers → 4-bit")
-        model = load_fresh_model(hf_id)
-        for layer in all_layer_names:
-            quantize_single_layer(model, layer, n_bits=4)
-        ppl = compute_perplexity(model, tokenizer, test_text, SEQ_LEN)
-        results["uniform_int4"] = round(ppl, 3)
-        print(f"    → PPL = {ppl:.3f}")
-        del model
-
-        # ── Uniform INT8 ────────────────────────────────────────────────
-        print(f"\n  [uniform_int8] all {len(all_layer_names)} layers → 8-bit")
-        model = load_fresh_model(hf_id)
-        for layer in all_layer_names:
-            quantize_single_layer(model, layer, n_bits=8)
-        ppl = compute_perplexity(model, tokenizer, test_text, SEQ_LEN)
-        results["uniform_int8"] = round(ppl, 3)
-        print(f"    → PPL = {ppl:.3f}")
-        del model
+            del compiled
 
         all_results[model_name] = results
 
-    # ── Save ─────────────────────────────────────────────────────────────
     with open(OUTPUT_JSON, "w") as f:
         json.dump(all_results, f, indent=2)
     print(f"\n{'='*60}")
     print(f"  Saved → {OUTPUT_JSON}")
 
-    # Print summary
     for model_name, results in all_results.items():
         print(f"\n  {model_name}:")
         for k, v in results.items():
-            print(f"    {k:<16} {v:>8.3f}")
+            print(f"    {k:<20} {v:>8.3f}")
 
 
 if __name__ == "__main__":

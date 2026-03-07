@@ -1,15 +1,18 @@
 """
 eval_perplexity_gpu.py  —  GPU Pipeline
 
-Evaluates WikiText-2 perplexity for GPU-compatible quantization points:
-  - baseline (FP32)
-  - gpu_point01..gpu_point10 (INT8/FP16 mixed from 8-bit sensitivity)
-  - uniform_int8 (all layers INT8)
+Evaluates WikiText-2 perplexity by loading the actual OpenVINO IR models
+(.xml / .bin) produced by quantize_mixed_gpu.py and quantize_uniform.py.
 
-Uses fake-quantization to INT8 only (matching GPU's supported precision).
+Configs evaluated per model:
+  - FP16 baseline   : {model}.xml
+  - mixed-precision : {model}_gpu_{METRIC_TAG}_point01.xml  ..  point08.xml
+  - uniform INT8    : {model}_uniform_int8.xml  (skipped gracefully if GPU compile fails)
+
+Note: SEQ_LEN=256 to match mamba2 chunk_size requirement.
 
 Output:
-    perplexity_results_gpu.json   — {model_name: {point: ppl}}
+    perplexity_results_gpu_{METRIC_TAG}.json  —  {model_name: {point: ppl}}
 
 Usage:
     python eval_perplexity_gpu.py
@@ -19,88 +22,41 @@ import os
 import json
 import torch
 import torch.nn.functional as F
+import openvino as ov
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
+from transformers import AutoTokenizer
 from tqdm import tqdm
-from quant_utils import quantize_weight_per_channel_absmax
 
 # ── Model Registry ───────────────────────────────────────────────────────────
 
 MODEL_REGISTRY = {
     "mamba2_b_1_t_4": {
-        "hf_id": "yuji96/mamba2-130m-hf",
-        # mamba2 shares the GPTNeoX tokenizer with mamba-130m-hf
+        "hf_id":        "yuji96/mamba2-130m-hf",
         "tokenizer_id": "state-spaces/mamba-130m-hf",
-        "sensitivity_8bit": "sensitivity_results_mamba2-130m_8bits_XAMBA.json",
+        "n_points":     8,    # capped: point09/10 fail GPU compilation (XAMBA MatMul)
+        "seq_len":      256,  # must match mamba2 chunk_size
     },
 }
 
-SEQ_LEN      = 256     # must match mamba2 chunk_size (256); 20×256=5120 tokens total
-N_POINTS     = 10
-MAX_WINDOWS  = 20
+OV_DIR      = "ov_models"
+DEVICE      = "GPU"
+MAX_WINDOWS = 20
 
 # ── Sensitivity metric ────────────────────────────────────────────────────────
-# "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
-# "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
-SENSITIVITY_METRIC = "sqnr_db"
-METRIC_TAG         = "sqnr" if SENSITIVITY_METRIC == "sqnr_db" else "kl"
-
-OUTPUT_JSON  = f"perplexity_results_gpu_{METRIC_TAG}.json"
-# e.g. perplexity_results_gpu_sqnr.json  or  perplexity_results_gpu_kl.json
-
-# ── Sensitivity (8-bit only) ─────────────────────────────────────────────────
-
-def load_sensitivity_8bit(path):
-    """Load 8-bit sensitivity, sorted so index 0 = least sensitive = quantize first.
-    SQNR: sort DESC (high SQNR = less noise = safer to quantize).
-    KL:   sort ASC  (low KL   = less divergence = safer to quantize).
-    """
-    with open(path) as f:
-        data = json.load(f)
-    layers = [(name, stats[SENSITIVITY_METRIC]) for name, stats in data.items()]
-    reverse = (SENSITIVITY_METRIC == "sqnr_db")
-    layers.sort(key=lambda x: x[1], reverse=reverse)
-    return layers
-
-
-def compute_cutoff_indices(n_entries, n_points=10):
-    # Divide into n_points equal segments, exclude the last entry (most sensitive)
-    segment_size = (n_entries - 1) // n_points
-    return [segment_size * i for i in range(1, n_points + 1)]
-
-# ── Quantization ─────────────────────────────────────────────────────────────
-
-def quantize_single_layer(model, layer_name, n_bits):
-    for name, mod in model.named_modules():
-        if name == layer_name and hasattr(mod, "weight"):
-            mod.weight.data = quantize_weight_per_channel_absmax(
-                mod.weight.data, n_bits=n_bits
-            )
-            return
-    print(f"    [warn] Layer not found: {layer_name}")
-
-# ── Model Loading ────────────────────────────────────────────────────────────
-
-def load_fresh_model(hf_id):
-    config = AutoConfig.from_pretrained(hf_id)
-    config.use_cache = False
-    model = AutoModelForCausalLM.from_pretrained(
-        hf_id, config=config, trust_remote_code=True
-    )
-    return model.eval()
+# Must match the METRIC_TAG used when running quantize_mixed_gpu.py
+SENSITIVITY_METRIC = "kl_student_to_teacher"
+METRIC_TAG         = "kl" if SENSITIVITY_METRIC == "kl_student_to_teacher" else "sqnr"
+OUTPUT_JSON        = f"perplexity_results_gpu_{METRIC_TAG}.json"
 
 # ── Perplexity ───────────────────────────────────────────────────────────────
 
-@torch.no_grad()
-def compute_perplexity(model, tokenizer, text, seq_len=2048):
+def compute_perplexity(compiled_model, tokenizer, text, seq_len):
+    """Non-overlapping windows over the OV compiled model. No gradients needed."""
     enc       = tokenizer(text, return_tensors="pt", truncation=False)
-    input_ids = enc.input_ids
+    input_ids = enc.input_ids.numpy()        # OV expects numpy
     N         = input_ids.shape[1]
-    n_windows = max(1, (N - 1) // seq_len)
+    n_windows = min(MAX_WINDOWS, max(1, (N - 1) // seq_len))
     pad_id    = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else -100
-
-    if MAX_WINDOWS is not None:
-        n_windows = min(n_windows, MAX_WINDOWS)
 
     nlls = []
     for i in tqdm(range(n_windows), desc="    eval", leave=False):
@@ -109,11 +65,14 @@ def compute_perplexity(model, tokenizer, text, seq_len=2048):
         chunk = input_ids[:, s:e]
         if chunk.shape[1] < 2:
             continue
-        inp = chunk[:, :-1]
-        tgt = chunk[:, 1:]
 
-        logits = model(input_ids=inp).logits
-        loss   = F.cross_entropy(
+        inp = chunk[:, :-1]
+        tgt = torch.from_numpy(chunk[:, 1:]).long()
+
+        result = compiled_model({"input_ids": inp})
+        logits = torch.from_numpy(result[0])   # result[0] = first output = logits
+
+        loss = F.cross_entropy(
             logits.reshape(-1, logits.shape[-1]),
             tgt.reshape(-1),
             ignore_index=pad_id,
@@ -130,62 +89,55 @@ def main():
     test_text = "\n\n".join(t for t in raw["text"] if t.strip())
     print(f"  {len(test_text):,} characters")
 
+    core        = ov.Core()
     all_results = {}
 
     for model_name, cfg in MODEL_REGISTRY.items():
         print(f"\n{'='*60}")
-        print(f"  Model: {model_name}  (GPU pipeline — INT8/FP16)")
+        print(f"  Model: {model_name}  (device: {DEVICE})")
         print(f"{'='*60}")
 
-        hf_id        = cfg["hf_id"]
-        tokenizer_id = cfg.get("tokenizer_id", hf_id)
+        tokenizer_id = cfg.get("tokenizer_id", cfg["hf_id"])
         tokenizer    = AutoTokenizer.from_pretrained(tokenizer_id)
+        n_points     = cfg.get("n_points", 10)
+        seq_len      = cfg.get("seq_len", 2048)
+        results      = {}
 
-        sensitivity = load_sensitivity_8bit(cfg["sensitivity_8bit"])
-        all_layer_names = [name for name, _ in sensitivity]
-        indices = compute_cutoff_indices(len(sensitivity), N_POINTS)
+        # Build ordered list of (label, xml_path) to evaluate
+        configs = []
 
-        results = {}
+        # FP16 baseline (XAMBA OV export)
+        p = os.path.join(OV_DIR, f"{model_name}.xml")
+        if os.path.exists(p):
+            configs.append(("baseline_fp16", p))
+        else:
+            print(f"  [!] Baseline not found: {p}  — run convert.py first")
 
-        # ── Baseline ─────────────────────────────────────────────────────
-        print("\n  [baseline] FP32 — no quantization")
-        model = load_fresh_model(hf_id)
-        ppl   = compute_perplexity(model, tokenizer, test_text, SEQ_LEN)
-        results["baseline"] = round(ppl, 3)
-        print(f"    → PPL = {ppl:.3f}")
-        del model
+        # GPU mixed-precision points (capped at n_points)
+        for i in range(1, n_points + 1):
+            p = os.path.join(OV_DIR, f"{model_name}_gpu_{METRIC_TAG}_point{i:02d}.xml")
+            if os.path.exists(p):
+                configs.append((f"gpu_{METRIC_TAG}_point{i:02d}", p))
 
-        # ── GPU mixed-precision points (INT8/FP16) ───────────────────────
-        for point_idx, cutoff in enumerate(indices):
-            point_name = f"gpu_{METRIC_TAG}_point{point_idx + 1:02d}"
+        # Uniform INT8 — may fail GPU compilation for XAMBA models
+        p = os.path.join(OV_DIR, f"{model_name}_uniform_int8.xml")
+        if os.path.exists(p):
+            configs.append(("uniform_int8", p))
 
-            int8_layers = [name for name, _ in sensitivity[:cutoff]]
-            fp16_layers = [name for name, _ in sensitivity[cutoff:]]
-
-            print(f"\n  [{point_name}] cutoff {cutoff}/{len(sensitivity)}  "
-                  f"(INT8:{len(int8_layers)}  FP16:{len(fp16_layers)})")
-
-            model = load_fresh_model(hf_id)
-            for layer in int8_layers:
-                quantize_single_layer(model, layer, n_bits=8)
-            ppl = compute_perplexity(model, tokenizer, test_text, SEQ_LEN)
-            results[point_name] = round(ppl, 3)
-            print(f"    → PPL = {ppl:.3f}")
-            del model
-
-        # ── Uniform INT8 ────────────────────────────────────────────────
-        print(f"\n  [uniform_int8] all {len(all_layer_names)} layers → 8-bit")
-        model = load_fresh_model(hf_id)
-        for layer in all_layer_names:
-            quantize_single_layer(model, layer, n_bits=8)
-        ppl = compute_perplexity(model, tokenizer, test_text, SEQ_LEN)
-        results["uniform_int8"] = round(ppl, 3)
-        print(f"    → PPL = {ppl:.3f}")
-        del model
+        for label, path in configs:
+            print(f"\n  [{label}]  {os.path.basename(path)}")
+            try:
+                compiled = core.compile_model(path, DEVICE)
+                ppl      = compute_perplexity(compiled, tokenizer, test_text, seq_len)
+                results[label] = round(ppl, 3)
+                print(f"    → PPL = {ppl:.3f}")
+                del compiled
+            except Exception as e:
+                print(f"    [!] GPU compilation failed — skipping  ({e})")
+                results[label] = None
 
         all_results[model_name] = results
 
-    # ── Save ─────────────────────────────────────────────────────────────
     with open(OUTPUT_JSON, "w") as f:
         json.dump(all_results, f, indent=2)
     print(f"\n{'='*60}")
@@ -194,7 +146,8 @@ def main():
     for model_name, results in all_results.items():
         print(f"\n  {model_name}:")
         for k, v in results.items():
-            print(f"    {k:<16} {v:>8.3f}")
+            val = f"{v:>8.3f}" if v is not None else "    failed"
+            print(f"    {k:<24} {val}")
 
 
 if __name__ == "__main__":
