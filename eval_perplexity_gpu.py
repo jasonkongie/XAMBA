@@ -1,13 +1,15 @@
 """
 eval_perplexity_gpu.py  —  GPU Pipeline
 
-Evaluates WikiText-2 perplexity by loading the actual OpenVINO IR models
-(.xml / .bin) produced by quantize_mixed_gpu.py and quantize_uniform.py.
+Evaluates WikiText-2 perplexity using NNCF compress_weights applied directly
+to the HuggingFace PyTorch model, matching the GPU quantization (INT8/FP16)
+used by quantize_mixed_gpu.py.  This avoids the static-shape limitation of
+the OV export (which is sized for benchmark latency, not evaluation seq_len).
 
 Configs evaluated per model:
-  - FP16 baseline   : {model}.xml
-  - mixed-precision : {model}_gpu_{METRIC_TAG}_point01.xml  ..  point08.xml
-  - uniform INT8    : {model}_uniform_int8.xml  (skipped gracefully if GPU compile fails)
+  - FP32 baseline   : unquantized HuggingFace model
+  - mixed-precision : NNCF INT8 per sensitivity ranking (8 points for mamba2)
+  - uniform INT8    : NNCF INT8_SYM on all linear layers
 
 Note: SEQ_LEN=256 to match mamba2 chunk_size requirement.
 
@@ -18,63 +20,79 @@ Usage:
     python eval_perplexity_gpu.py
 """
 
-import os
 import json
 import torch
 import torch.nn.functional as F
-import openvino as ov
+import nncf
 from datasets import load_dataset
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 from tqdm import tqdm
 
 # ── Model Registry ───────────────────────────────────────────────────────────
 
 MODEL_REGISTRY = {
     "mamba2_b_1_t_4": {
-        "hf_id":        "yuji96/mamba2-130m-hf",
-        "tokenizer_id": "state-spaces/mamba-130m-hf",
-        "n_points":     8,    # capped: point09/10 fail GPU compilation (XAMBA MatMul)
-        "seq_len":      256,  # must match mamba2 chunk_size
+        "hf_id":            "yuji96/mamba2-130m-hf",
+        "tokenizer_id":     "state-spaces/mamba-130m-hf",
+        "sensitivity_8bit": "sensitivity_results_mamba2-130m_8bits_XAMBA.json",
+        "n_points":         8,    # matches GPU point cap (point09/10 fail OV GPU compile)
+        "seq_len":          256,  # must match mamba2 chunk_size
     },
 }
 
-OV_DIR      = "ov_models"
-DEVICE      = "GPU"
 MAX_WINDOWS = 20
 
 # ── Sensitivity metric ────────────────────────────────────────────────────────
-# Must match the METRIC_TAG used when running quantize_mixed_gpu.py
 SENSITIVITY_METRIC = "kl_student_to_teacher"
 METRIC_TAG         = "kl" if SENSITIVITY_METRIC == "kl_student_to_teacher" else "sqnr"
 OUTPUT_JSON        = f"perplexity_results_gpu_{METRIC_TAG}.json"
 
-# ── Perplexity ───────────────────────────────────────────────────────────────
+# Exclude Conv1d (SSM conv1d) — matches OV pipeline's IgnoredScope(types=["Convolution"])
+LINEAR_ONLY_SCOPE = nncf.IgnoredScope(types=["Conv1d"], validate=False)
 
-def compute_perplexity(compiled_model, tokenizer, text, seq_len):
-    """Non-overlapping windows over the OV compiled model. No gradients needed."""
+# ── Sensitivity helpers ───────────────────────────────────────────────────────
+
+def load_sensitivity_8bit(path):
+    with open(path) as f:
+        data = json.load(f)
+    layers = [(name, stats[SENSITIVITY_METRIC]) for name, stats in data.items()]
+    reverse = (SENSITIVITY_METRIC == "sqnr_db")
+    layers.sort(key=lambda x: x[1], reverse=reverse)
+    return layers
+
+def compute_cutoff_indices(n_entries, n_points=10):
+    segment_size = (n_entries - 1) // n_points
+    return [segment_size * i for i in range(1, n_points + 1)]
+
+# ── Model loading ─────────────────────────────────────────────────────────────
+
+def load_fresh_model(hf_id):
+    config = AutoConfig.from_pretrained(hf_id)
+    config.use_cache = False
+    return AutoModelForCausalLM.from_pretrained(
+        hf_id, config=config, trust_remote_code=True
+    ).eval()
+
+# ── Perplexity ────────────────────────────────────────────────────────────────
+
+@torch.no_grad()
+def compute_perplexity(model, tokenizer, text, seq_len):
     enc       = tokenizer(text, return_tensors="pt", truncation=False)
-    input_ids = enc.input_ids.numpy()        # OV expects numpy
+    input_ids = enc.input_ids
     N         = input_ids.shape[1]
     n_windows = min(MAX_WINDOWS, max(1, (N - 1) // seq_len))
     pad_id    = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else -100
 
     nlls = []
     for i in tqdm(range(n_windows), desc="    eval", leave=False):
-        s     = i * seq_len
-        e     = min(s + seq_len + 1, N)
+        s, e  = i * seq_len, min(i * seq_len + seq_len + 1, N)
         chunk = input_ids[:, s:e]
         if chunk.shape[1] < 2:
             continue
-
-        inp = chunk[:, :-1]
-        tgt = torch.from_numpy(chunk[:, 1:]).long()
-
-        result = compiled_model({"input_ids": inp})
-        logits = torch.from_numpy(result[0])   # result[0] = first output = logits
-
-        loss = F.cross_entropy(
+        logits = model(input_ids=chunk[:, :-1]).logits
+        loss   = F.cross_entropy(
             logits.reshape(-1, logits.shape[-1]),
-            tgt.reshape(-1),
+            chunk[:, 1:].reshape(-1),
             ignore_index=pad_id,
         )
         nlls.append(loss.item())
@@ -89,57 +107,66 @@ def main():
     test_text = "\n\n".join(t for t in raw["text"] if t.strip())
     print(f"  {len(test_text):,} characters")
 
-    core        = ov.Core()
     all_results = {}
 
     for model_name, cfg in MODEL_REGISTRY.items():
         print(f"\n{'='*60}")
-        print(f"  Model: {model_name}  (device: {DEVICE})")
+        print(f"  Model: {model_name}  (GPU pipeline — INT8/FP16)")
         print(f"{'='*60}")
 
-        tokenizer_id = cfg.get("tokenizer_id", cfg["hf_id"])
+        hf_id        = cfg["hf_id"]
+        tokenizer_id = cfg.get("tokenizer_id", hf_id)
         tokenizer    = AutoTokenizer.from_pretrained(tokenizer_id)
-        n_points     = cfg.get("n_points", 10)
-        seq_len      = cfg.get("seq_len", 2048)
+        seq_len      = cfg["seq_len"]
+        n_points     = cfg["n_points"]
+        sensitivity  = load_sensitivity_8bit(cfg["sensitivity_8bit"])
+        indices      = compute_cutoff_indices(len(sensitivity), n_points)
         results      = {}
 
-        # Build ordered list of (label, xml_path) to evaluate
-        configs = []
+        # ── Baseline (FP32) ───────────────────────────────────────────────
+        print("\n  [baseline_fp32]")
+        model = load_fresh_model(hf_id)
+        ppl   = compute_perplexity(model, tokenizer, test_text, seq_len)
+        results["baseline_fp32"] = round(ppl, 3)
+        print(f"    → PPL = {ppl:.3f}")
+        del model
 
-        # FP16 baseline (XAMBA OV export)
-        p = os.path.join(OV_DIR, f"{model_name}.xml")
-        if os.path.exists(p):
-            configs.append(("baseline_fp16", p))
-        else:
-            print(f"  [!] Baseline not found: {p}  — run convert.py first")
+        # ── GPU mixed-precision points (INT8 / FP16) ──────────────────────
+        for point_idx, cutoff in enumerate(indices):
+            label      = f"gpu_{METRIC_TAG}_point{point_idx + 1:02d}"
+            int8_names = [name for name, _ in sensitivity[:cutoff]]
+            fp16_names = [name for name, _ in sensitivity[cutoff:]]
+            print(f"\n  [{label}] cutoff {cutoff}/{len(sensitivity)}  "
+                  f"INT8:{len(int8_names)}  FP16:{len(fp16_names)}")
+            model = load_fresh_model(hf_id)
+            model = nncf.compress_weights(
+                model,
+                mode          = nncf.CompressWeightsMode.INT8_SYM,
+                group_size    = -1,
+                ignored_scope = nncf.IgnoredScope(
+                    types    = ["Conv1d"],
+                    names    = fp16_names,
+                    validate = False,
+                ),
+            )
+            ppl = compute_perplexity(model, tokenizer, test_text, seq_len)
+            results[label] = round(ppl, 3)
+            print(f"    → PPL = {ppl:.3f}")
+            del model
 
-        # GPU mixed-precision points (capped at n_points)
-        for i in range(1, n_points + 1):
-            p = os.path.join(OV_DIR, f"{model_name}_gpu_{METRIC_TAG}_point{i:02d}.xml")
-            if os.path.exists(p):
-                configs.append((f"gpu_{METRIC_TAG}_point{i:02d}", p))
-
-        # Uniform INT8 — may fail GPU compilation for XAMBA models
-        p = os.path.join(OV_DIR, f"{model_name}_uniform_int8.xml")
-        if os.path.exists(p):
-            configs.append(("uniform_int8", p))
-
-        for label, path in configs:
-            print(f"\n  [{label}]  {os.path.basename(path)}")
-            try:
-                ov_model = core.read_model(path)
-                # The model is exported with a static benchmark shape (e.g. [1,4]).
-                # Reshape to our eval seq_len before compilation.
-                input_name = ov_model.input(0).any_name
-                ov_model.reshape({input_name: [1, seq_len]})
-                compiled = core.compile_model(ov_model, DEVICE)
-                ppl      = compute_perplexity(compiled, tokenizer, test_text, seq_len)
-                results[label] = round(ppl, 3)
-                print(f"    → PPL = {ppl:.3f}")
-                del compiled
-            except Exception as e:
-                print(f"    [!] Failed — skipping  ({e})")
-                results[label] = None
+        # ── Uniform INT8 ──────────────────────────────────────────────────
+        print(f"\n  [uniform_int8]")
+        model = load_fresh_model(hf_id)
+        model = nncf.compress_weights(
+            model,
+            mode          = nncf.CompressWeightsMode.INT8_SYM,
+            group_size    = -1,
+            ignored_scope = LINEAR_ONLY_SCOPE,
+        )
+        ppl = compute_perplexity(model, tokenizer, test_text, seq_len)
+        results["uniform_int8"] = round(ppl, 3)
+        print(f"    → PPL = {ppl:.3f}")
+        del model
 
         all_results[model_name] = results
 
@@ -147,12 +174,10 @@ def main():
         json.dump(all_results, f, indent=2)
     print(f"\n{'='*60}")
     print(f"  Saved → {OUTPUT_JSON}")
-
     for model_name, results in all_results.items():
         print(f"\n  {model_name}:")
         for k, v in results.items():
-            val = f"{v:>8.3f}" if v is not None else "    failed"
-            print(f"    {k:<24} {val}")
+            print(f"    {k:<28} {v:>8.3f}")
 
 
 if __name__ == "__main__":
