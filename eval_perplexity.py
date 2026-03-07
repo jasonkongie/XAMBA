@@ -62,9 +62,14 @@ def quantize_weight(w: torch.Tensor, n_bits: int) -> torch.Tensor:
     Matches NNCF compress_weights INT4_SYM / INT8_SYM with group_size=-1.
     Used for mixed-precision points where two NNCF passes on the same
     PyTorch model would fail (NNCF wraps layers after the first call).
+
+    scale = max_abs / q_max  so that  w / scale  maps to [-q_max, q_max],
+    giving 2*q_max+1 distinct quantized values (e.g. 255 for INT8, 15 for INT4).
+    Without the / q_max, w / scale maps to [-1, 1] and round() collapses
+    everything to {-1, 0, 1} — only 3 values, which destroys quality.
     """
     q_max  = 2 ** (n_bits - 1) - 1
-    scales = w.abs().max(dim=-1, keepdim=True).values.clamp(min=1e-5)
+    scales = w.abs().max(dim=-1, keepdim=True).values.clamp(min=1e-5) / q_max
     return (w / scales).round().clamp(-q_max, q_max) * scales
 
 # ── Sensitivity helpers ───────────────────────────────────────────────────────
