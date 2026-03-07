@@ -34,6 +34,10 @@ DURATION       = 60    # seconds per benchmark run
 N_ITER         = 50    # minimum iterations (run until BOTH -t and -niter are satisfied)
 FORCE_RERUN    = True  # set False to skip already-completed models (resumable mode)
 
+# Must match SENSITIVITY_METRIC in quantize_mixed.py  ("sqnr" or "kl")
+# Controls which _<tag>_point* files are benchmarked and names the output CSV.
+METRIC_TAG     = "sqnr"
+
 # Regex for parsing benchmark_app output
 LATENCY_RE    = re.compile(r"\[ INFO \]\s+Average:\s+([\d\.]+)\s+ms")
 THROUGHPUT_RE = re.compile(r"\[ INFO \]\s+Throughput:\s+([\d\.]+)\s+FPS")
@@ -43,18 +47,23 @@ THROUGHPUT_RE = re.compile(r"\[ INFO \]\s+Throughput:\s+([\d\.]+)\s+FPS")
 def find_cpu_models(models_dir, prefixes):
     """
     Find all .xml files in models_dir that belong to registered models.
-    Excludes GPU-specific files (*_gpu_point*).
+    - Excludes GPU-specific files (contain '_gpu_')
+    - For mixed-precision point files, only includes those tagged with METRIC_TAG
+      (e.g. '_sqnr_point*') — avoids mixing KL and SQNR results
+    - Always includes baseline ({model}.xml) and uniform variants (_uniform_*)
     Returns sorted list of (xml_filename, model_path).
     """
     results = []
     for f in sorted(os.listdir(models_dir)):
         if not f.endswith(".xml"):
             continue
-        # Must start with a registered model prefix
         if not any(f.startswith(p) for p in prefixes):
             continue
         # Exclude GPU-specific models
-        if "_gpu_point" in f:
+        if "_gpu_" in f:
+            continue
+        # For point files, only include those tagged with the current METRIC_TAG
+        if "_point" in f and f"_{METRIC_TAG}_point" not in f:
             continue
         results.append((f, os.path.join(models_dir, f)))
     return results
@@ -142,7 +151,7 @@ def main():
         print()
 
     # ── Extract summary CSV ──────────────────────────────────────────────
-    csv_path = os.path.join(LOG_DIR, "latency_throughput_report.csv")
+    csv_path = os.path.join(LOG_DIR, f"latency_throughput_{METRIC_TAG}_report.csv")
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["filename", "device", "latency_ms", "throughput_fps"])

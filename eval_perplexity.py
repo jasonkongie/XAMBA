@@ -44,12 +44,15 @@ MODEL_REGISTRY = {
 SEQ_LEN      = 2048
 N_POINTS     = 10
 MAX_WINDOWS  = 20      # 20 windows (~40k tokens)
-OUTPUT_JSON  = "perplexity_results.json"
 
 # ── Sensitivity metric ────────────────────────────────────────────────────────
 # "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
 # "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
 SENSITIVITY_METRIC = "sqnr_db"
+METRIC_TAG         = "sqnr" if SENSITIVITY_METRIC == "sqnr_db" else "kl"
+
+OUTPUT_JSON  = f"perplexity_results_{METRIC_TAG}.json"
+# e.g. perplexity_results_sqnr.json  or  perplexity_results_kl.json
 
 # ── Sensitivity (same as quantize_mixed.py) ──────────────────────────────────
 
@@ -174,7 +177,7 @@ def main():
 
         # ── Mixed-precision points ───────────────────────────────────────
         for point_idx, cutoff in enumerate(indices):
-            point_name = f"point{point_idx + 1:02d}"
+            point_name = f"{METRIC_TAG}_point{point_idx + 1:02d}"
             assignment = get_layer_assignments(S, cutoff)
             n4 = sum(1 for b in assignment.values() if b == 4)
             n8 = sum(1 for b in assignment.values() if b == 8)

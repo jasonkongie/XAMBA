@@ -48,6 +48,8 @@ XAMBA_MATMUL_PATTERN = r".*/mixer/MatMul.*"
 # "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
 # "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
 SENSITIVITY_METRIC = "sqnr_db"
+METRIC_TAG         = "sqnr" if SENSITIVITY_METRIC == "sqnr_db" else "kl"
+# Output: mamba2_b_1_t_4_gpu_int4_sqnr_point01.xml
 
 # ── Sensitivity ───────────────────────────────────────────────────────────────
 
@@ -176,7 +178,7 @@ def main():
 
         # ── Mixed-precision points ────────────────────────────────────────
         for point_idx, cutoff in enumerate(indices):
-            point_name  = f"gpu_int4_point{point_idx + 1:02d}"
+            point_name  = f"gpu_int4_{METRIC_TAG}_point{point_idx + 1:02d}"
             output_path = os.path.join(OUTPUT_DIR, f"{model_name}_{point_name}.xml")
 
             print(f"\n  ── {point_name} (cutoff {cutoff}/{len(S)-1}) ──")

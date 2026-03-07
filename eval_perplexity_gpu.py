@@ -38,12 +38,15 @@ MODEL_REGISTRY = {
 SEQ_LEN      = 256     # must match mamba2 chunk_size (256); 20×256=5120 tokens total
 N_POINTS     = 10
 MAX_WINDOWS  = 20
-OUTPUT_JSON  = "perplexity_results_gpu.json"
 
 # ── Sensitivity metric ────────────────────────────────────────────────────────
 # "sqnr_db"             → higher SQNR = less sensitive = quantize first (sort DESC)
 # "kl_student_to_teacher" → lower KL  = less sensitive = quantize first (sort ASC)
 SENSITIVITY_METRIC = "sqnr_db"
+METRIC_TAG         = "sqnr" if SENSITIVITY_METRIC == "sqnr_db" else "kl"
+
+OUTPUT_JSON  = f"perplexity_results_gpu_{METRIC_TAG}.json"
+# e.g. perplexity_results_gpu_sqnr.json  or  perplexity_results_gpu_kl.json
 
 # ── Sensitivity (8-bit only) ─────────────────────────────────────────────────
 
@@ -154,7 +157,7 @@ def main():
 
         # ── GPU mixed-precision points (INT8/FP16) ───────────────────────
         for point_idx, cutoff in enumerate(indices):
-            point_name = f"gpu_point{point_idx + 1:02d}"
+            point_name = f"gpu_{METRIC_TAG}_point{point_idx + 1:02d}"
 
             int8_layers = [name for name, _ in sensitivity[:cutoff]]
             fp16_layers = [name for name, _ in sensitivity[cutoff:]]

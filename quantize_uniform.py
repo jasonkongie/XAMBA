@@ -28,25 +28,39 @@ MODEL_REGISTRY = {
     },
     "mamba2_b_1_t_4": {
         "hf_id": "yuji96/mamba2-130m-hf",
+        # XAMBA CumBA MatMul (/mixer/MatMul) has no INT8/INT4 GPU kernel.
+        # Even at the uniform level (all 4 linear layers INT8), the surrounding
+        # INT8 context causes oneDNN to fail its primitive descriptor for the
+        # MatMul — same root cause as mixed-precision point09/10.
+        # Must exclude it from quantization so the model compiles on GPU.
+        "xamba": True,
     },
 }
 
 OUTPUT_DIR = "ov_models"
 
-# Only quantize linear (MatMul) layers — exclude conv1d and other non-linear ops
+# Shared ignore scopes
+XAMBA_MATMUL_PATTERN = r".*/mixer/MatMul.*"
+
+# Standard: exclude Convolution (SSM conv1d) only
 LINEAR_ONLY_SCOPE = nncf.IgnoredScope(types=["Convolution"], validate=False)
+
+# XAMBA: also exclude the CumBA MatMul so GPU compilation succeeds
+XAMBA_LINEAR_ONLY_SCOPE = nncf.IgnoredScope(
+    types    = ["Convolution"],
+    patterns = [XAMBA_MATMUL_PATTERN],
+    validate = False,
+)
 
 CONFIGS = {
     "uniform_int8": dict(
-        mode          = nncf.CompressWeightsMode.INT8_SYM,
-        group_size    = -1,      # per-channel
-        ignored_scope = LINEAR_ONLY_SCOPE,
+        mode       = nncf.CompressWeightsMode.INT8_SYM,
+        group_size = -1,     # per-channel
     ),
     "uniform_int4": dict(
-        mode          = nncf.CompressWeightsMode.INT4_SYM,
-        ratio         = 1.0,     # compress ALL eligible layers
-        group_size    = -1,      # per-channel; avoids INT8 fallback
-        ignored_scope = LINEAR_ONLY_SCOPE,
+        mode       = nncf.CompressWeightsMode.INT4_SYM,
+        ratio      = 1.0,    # compress ALL eligible layers
+        group_size = -1,     # per-channel; avoids INT8 fallback
     ),
 }
 
@@ -56,19 +70,24 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     core = ov.Core()
 
-    for model_name in MODEL_REGISTRY:
+    for model_name, cfg in MODEL_REGISTRY.items():
         input_model = os.path.join(OUTPUT_DIR, f"{model_name}.xml")
         if not os.path.exists(input_model):
             print(f"[!] Baseline model not found: {input_model}  — run convert.py first")
             continue
 
+        # XAMBA models need the MatMul excluded too (no GPU INT8/INT4 kernel)
+        scope = XAMBA_LINEAR_ONLY_SCOPE if cfg.get("xamba") else LINEAR_ONLY_SCOPE
+
         for suffix, kwargs in CONFIGS.items():
             print(f"\n{'='*55}")
             print(f"  {model_name} → {suffix}  (mode: {kwargs['mode']})")
+            if cfg.get("xamba"):
+                print(f"  [XAMBA] MatMul excluded from quantization (no GPU kernel)")
             print(f"{'='*55}")
 
             ov_model   = core.read_model(input_model)
-            compressed = nncf.compress_weights(model=ov_model, **kwargs)  # ignored_scope included in kwargs
+            compressed = nncf.compress_weights(model=ov_model, ignored_scope=scope, **kwargs)
 
             output_path = os.path.join(OUTPUT_DIR, f"{model_name}_{suffix}.xml")
             ov.save_model(compressed, output_path, compress_to_fp16=True)

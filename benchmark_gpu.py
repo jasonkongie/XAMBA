@@ -38,6 +38,10 @@ DURATION       = 60    # seconds per benchmark run
 N_ITER         = 50    # minimum iterations (run until BOTH -t and -niter are satisfied)
 FORCE_RERUN    = True  # set False to skip already-completed models (resumable mode)
 
+# Must match SENSITIVITY_METRIC in quantize_mixed_gpu.py  ("sqnr" or "kl")
+# Controls which _gpu_<tag>_point* files are benchmarked and names the output CSV.
+METRIC_TAG     = "sqnr"
+
 LATENCY_RE    = re.compile(r"\[ INFO \]\s+Average:\s+([\d\.]+)\s+ms")
 THROUGHPUT_RE = re.compile(r"\[ INFO \]\s+Throughput:\s+([\d\.]+)\s+FPS")
 
@@ -63,19 +67,20 @@ def find_gpu_models(models_dir, prefixes):
                 continue
             suffix = stem[len(prefix):]   # everything after model prefix
 
-            # Accept: baseline, _gpu_point{01..N}, _uniform_int8
+            # Accept: baseline, _gpu_<METRIC_TAG>_point{01..N}, _uniform_int8
             # mamba2_b_1_t_4 caps at 8 GPU points (09/10 always fail GPU compile)
+            tagged_prefix = f"_gpu_{METRIC_TAG}_point"
             if suffix == "" or suffix == "_uniform_int8":
                 results.append((f, os.path.join(models_dir, f)))
-            elif suffix.startswith("_gpu_point"):
+            elif suffix.startswith(tagged_prefix):
                 # Parse point index and reject points beyond the model's max
                 try:
-                    pt_num = int(suffix.replace("_gpu_point", ""))
+                    pt_num = int(suffix.replace(tagged_prefix, ""))
                     max_pts = MODEL_GPU_POINTS.get(prefix, 10)
                     if pt_num <= max_pts:
                         results.append((f, os.path.join(models_dir, f)))
                     else:
-                        pass   # silently skip — this model never generates this point
+                        pass   # silently skip — model never generates this point
                 except ValueError:
                     results.append((f, os.path.join(models_dir, f)))
             break  # matched a prefix, no need to check others
@@ -163,7 +168,7 @@ def main():
         print()
 
     # ── Summary CSV ──────────────────────────────────────────────────────
-    csv_path = os.path.join(LOG_DIR, "latency_throughput_gpu_report.csv")
+    csv_path = os.path.join(LOG_DIR, f"latency_throughput_gpu_{METRIC_TAG}_report.csv")
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["filename", "device", "latency_ms", "throughput_fps"])
