@@ -70,9 +70,10 @@ def build_sensitivity_list(path4, path8):
 def compute_cutoff_indices(n_entries, n_points=10):
     """
     Return n_points evenly-spaced cutoff indices.
-    Point i quantizes the first i/n_points of the sorted list.
+    safe_max = n_entries - 1: the last (most sensitive) entry is NEVER quantized.
     """
-    return [n_entries * i // n_points for i in range(1, n_points + 1)]
+    safe_max = n_entries - 1
+    return [safe_max * i // n_points for i in range(1, n_points + 1)]
 
 
 def get_layer_assignments(S, cutoff_idx):

@@ -31,8 +31,7 @@ MODEL_REGISTRY = {
         "hf_id": "yuji96/mamba2-130m-hf",
         # mamba2 shares the GPTNeoX tokenizer with mamba-130m-hf
         "tokenizer_id": "state-spaces/mamba-130m-hf",
-        # No 8-bit sensitivity file yet; 4-bit KL values used as ranking proxy
-        "sensitivity_8bit": "sensitivity_results_mamba2-130m_4bits.json",
+        "sensitivity_8bit": "sensitivity_results_mamba2-130m_8bits_XAMBA.json",
     },
 }
 

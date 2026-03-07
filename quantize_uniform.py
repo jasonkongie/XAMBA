@@ -33,15 +33,20 @@ MODEL_REGISTRY = {
 
 OUTPUT_DIR = "ov_models"
 
+# Only quantize linear (MatMul) layers — exclude conv1d and other non-linear ops
+LINEAR_ONLY_SCOPE = nncf.IgnoredScope(types=["Convolution"], validate=False)
+
 CONFIGS = {
     "uniform_int8": dict(
-        mode       = nncf.CompressWeightsMode.INT8_SYM,
-        group_size = -1,     # per-channel
+        mode          = nncf.CompressWeightsMode.INT8_SYM,
+        group_size    = -1,      # per-channel
+        ignored_scope = LINEAR_ONLY_SCOPE,
     ),
     "uniform_int4": dict(
-        mode       = nncf.CompressWeightsMode.INT4_SYM,
-        ratio      = 1.0,    # compress ALL layers
-        group_size = -1,     # per-channel; avoids INT8 fallback
+        mode          = nncf.CompressWeightsMode.INT4_SYM,
+        ratio         = 1.0,     # compress ALL eligible layers
+        group_size    = -1,      # per-channel; avoids INT8 fallback
+        ignored_scope = LINEAR_ONLY_SCOPE,
     ),
 }
 
@@ -63,7 +68,7 @@ def main():
             print(f"{'='*55}")
 
             ov_model   = core.read_model(input_model)
-            compressed = nncf.compress_weights(model=ov_model, **kwargs)
+            compressed = nncf.compress_weights(model=ov_model, **kwargs)  # ignored_scope included in kwargs
 
             output_path = os.path.join(OUTPUT_DIR, f"{model_name}_{suffix}.xml")
             ov.save_model(compressed, output_path, compress_to_fp16=True)

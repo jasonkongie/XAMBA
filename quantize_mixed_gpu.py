@@ -32,8 +32,7 @@ MODEL_REGISTRY = {
     },
     "mamba2_b_1_t_4": {
         "hf_id": "yuji96/mamba2-130m-hf",
-        # No 8-bit sensitivity file yet; 4-bit KL values used as ranking proxy
-        "sensitivity_8bit": "sensitivity_results_mamba2-130m_4bits.json",
+        "sensitivity_8bit": "sensitivity_results_mamba2-130m_8bits_XAMBA.json",
     },
 }
 
@@ -52,7 +51,9 @@ def load_sensitivity_8bit(path):
 
 
 def compute_cutoff_indices(n_entries, n_points=10):
-    return [n_entries * i // n_points for i in range(1, n_points + 1)]
+    # Protect last entry (most sensitive layer) — never quantize it
+    safe_max = n_entries - 1
+    return [safe_max * i // n_points for i in range(1, n_points + 1)]
 
 # ── IR Name Mapping ──────────────────────────────────────────────────────────
 
@@ -71,9 +72,13 @@ def build_ignore_patterns(pytorch_layer_names):
 
 # ── Single-Pass Quantization ─────────────────────────────────────────────────
 
+# XAMBA CumBA MatMul ops (cumsum replacement) have no INT8 GPU kernel — always keep FP16
+XAMBA_MATMUL_PATTERN = r".*/mixer/MatMul.*"
+
 def quantize_gpu_point(core, input_model_path, int8_layers, fp16_layers, output_path):
     """
     Single-pass NNCF: INT8_SYM for quantized layers, FP16 for the rest.
+    XAMBA CumBA MatMul ops are always excluded (no INT8 GPU kernel for them).
     """
     print(f"    INT8: {len(int8_layers)}  |  FP16: {len(fp16_layers)}")
 
@@ -81,6 +86,8 @@ def quantize_gpu_point(core, input_model_path, int8_layers, fp16_layers, output_
 
     if int8_layers:
         ignore_patterns = build_ignore_patterns(fp16_layers)
+        # Always exclude XAMBA CumBA MatMul ops regardless of sensitivity ranking
+        ignore_patterns.append(XAMBA_MATMUL_PATTERN)
         ignored = nncf.IgnoredScope(patterns=ignore_patterns, validate=False) if ignore_patterns else None
 
         kwargs = dict(

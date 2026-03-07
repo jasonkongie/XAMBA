@@ -30,8 +30,8 @@ OV_MODELS_DIR  = "ov_models"
 LOG_DIR        = "log/benchmark_log"
 DEVICE         = "CPU"
 HINT           = "latency"
-DURATION       = 30    # seconds per benchmark run
-N_ITER         = 100   # minimum iterations (run until BOTH -t and -niter are satisfied)
+DURATION       = 60    # seconds per benchmark run
+N_ITER         = 300   # minimum iterations (run until BOTH -t and -niter are satisfied)
 FORCE_RERUN    = True  # set False to skip already-completed models (resumable mode)
 
 # Regex for parsing benchmark_app output
