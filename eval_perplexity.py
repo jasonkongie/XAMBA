@@ -125,8 +125,13 @@ def main():
 
         for label, path in configs:
             print(f"\n  [{label}]  {os.path.basename(path)}")
-            compiled = core.compile_model(path, DEVICE)
-            ppl      = compute_perplexity(compiled, tokenizer, test_text, SEQ_LEN)
+            ov_model   = core.read_model(path)
+            # The model may have been exported with a static benchmark shape.
+            # Reshape to our eval seq_len before compilation.
+            input_name = ov_model.input(0).any_name
+            ov_model.reshape({input_name: [1, SEQ_LEN]})
+            compiled   = core.compile_model(ov_model, DEVICE)
+            ppl        = compute_perplexity(compiled, tokenizer, test_text, SEQ_LEN)
             results[label] = round(ppl, 3)
             print(f"    → PPL = {ppl:.3f}")
             del compiled

@@ -127,13 +127,18 @@ def main():
         for label, path in configs:
             print(f"\n  [{label}]  {os.path.basename(path)}")
             try:
-                compiled = core.compile_model(path, DEVICE)
+                ov_model = core.read_model(path)
+                # The model is exported with a static benchmark shape (e.g. [1,4]).
+                # Reshape to our eval seq_len before compilation.
+                input_name = ov_model.input(0).any_name
+                ov_model.reshape({input_name: [1, seq_len]})
+                compiled = core.compile_model(ov_model, DEVICE)
                 ppl      = compute_perplexity(compiled, tokenizer, test_text, seq_len)
                 results[label] = round(ppl, 3)
                 print(f"    → PPL = {ppl:.3f}")
                 del compiled
             except Exception as e:
-                print(f"    [!] GPU compilation failed — skipping  ({e})")
+                print(f"    [!] Failed — skipping  ({e})")
                 results[label] = None
 
         all_results[model_name] = results
