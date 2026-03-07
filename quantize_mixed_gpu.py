@@ -51,9 +51,9 @@ def load_sensitivity_8bit(path):
 
 
 def compute_cutoff_indices(n_entries, n_points=10):
-    # Protect last entry (most sensitive layer) — never quantize it
-    safe_max = n_entries - 1
-    return [safe_max * i // n_points for i in range(1, n_points + 1)]
+    # Divide into n_points equal segments, exclude the last entry (most sensitive)
+    segment_size = (n_entries - 1) // n_points
+    return [segment_size * i for i in range(1, n_points + 1)]
 
 # ── IR Name Mapping ──────────────────────────────────────────────────────────
 
